@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+{% block title %}Player Details{% endblock %}
+{% block content %}
+  <h1>{{ player.name }}</h1>
+  <p><strong>Character: </strong>{{ player.character_main }}</p>
+  <p><strong>Region: </strong>{{ player.region_code }}</p>
+
+  <h2>Sets</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Player 1</th>
+        <th>Player 2</th>
+        <th>Player 1 Score</th>
+        <th>Player 2 Score</th>
+        <th>Tournament</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for set in sets %}
+        <tr>
+          <td><a href="{% url 'player_detail' set.player1.playerid %}">{{ set.player1.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player2.playerid %}">{{ set.player2.name }}</a></td>
+          <td>{{ set.player1score }}</td>
+          <td>{{ set.player2score }}</td>
+          <td>{{ set.tour.name }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}

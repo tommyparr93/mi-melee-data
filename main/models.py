@@ -139,10 +139,12 @@ class Player(models.Model):
         db_table = 'player'
 
 
-
 class Region(models.Model):
     id = models.IntegerField(primary_key=True)
     name = models.CharField(blank=True, null=True)
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         managed = False

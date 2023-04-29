@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>{% block title %}My Site{% endblock %}</title>
+  </head>
+  <body>
+    <nav>
+      <ul>
+        <li><a href="{% url 'players' %}">Players</a></li>
+        <li><a href="{% url 'tournaments' %}">Tournaments</a></li>
+        <li><a href="{% url 'regions' %}">Regions</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      {% block content %}
+      {% endblock %}
+    </main>
+  </body>
+</html>

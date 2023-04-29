@@ -197,7 +197,7 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='TournamentResults',
             fields=[
-                ('tour', models.OneToOneField(on_delete=django.db.models.deletion.DO_NOTHING, primary_key=True, serialize=False, to='players.tournament')),
+                ('tour', models.OneToOneField(on_delete=django.db.models.deletion.DO_NOTHING, primary_key=True, serialize=False, to='main.tournament')),
                 ('name', models.CharField(blank=True, null=True)),
                 ('placement', models.IntegerField(blank=True, null=True)),
             ],
