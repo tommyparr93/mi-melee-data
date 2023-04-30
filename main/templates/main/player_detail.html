@@ -4,6 +4,10 @@
   <h1>{{ player.name }}</h1>
   <p><strong>Character: </strong>{{ player.character_main }}</p>
   <p><strong>Region: </strong>{{ player.region_code }}</p>
+  <p>Number of sets played: {{ sets.count }}</p>
+  <p>Number of sets won: {{ calculations.0 }}</p>
+  <p>Number of sets lost: {{ calculations.1 }}</p>
+  <p>Win Rate: {{ calculations.2 }}%</p>
 
   <h2>Sets</h2>
   <table>
@@ -23,9 +27,17 @@
           <td><a href="{% url 'player_detail' set.player2.playerid %}">{{ set.player2.name }}</a></td>
           <td>{{ set.player1score }}</td>
           <td>{{ set.player2score }}</td>
-          <td>{{ set.tour.name }}</td>
+          <td><a href="{% url 'tournament_details' pk=set.tour.pk %}">{{ set.tour.name }}</a></td>
         </tr>
       {% endfor %}
     </tbody>
   </table>
+  <h2>Tournaments</h2>
+  <ul>
+  {% for tournament in tournaments %}
+      <li>{{ tournament.name }}</li>
+  {% empty %}
+      <li>No tournaments found</li>
+  {% endfor %}
+  </ul>
 {% endblock %}

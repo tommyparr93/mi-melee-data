@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Player Details{% endblock %}
+{% block content %}
+  <h1>{{ tournament.name }}</h1>
+  <p><strong>Date: </strong>{{ tournament.date }}</p>
+  <p><strong>Entrants: </strong>{{ tournament.entrant_count }}</p>
+
+  <h2>Sets</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Player 1</th>
+        <th>Player 2</th>
+        <th>Player 1 Score</th>
+        <th>Player 2 Score</th>
+        <th>Tournament</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for set in sets %}
+        <tr>
+          <td><a href="{% url 'player_detail' set.player1.playerid %}">{{ set.player1.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player2.playerid %}">{{ set.player2.name }}</a></td>
+          <td>{{ set.player1score }}</td>
+          <td>{{ set.player2score }}</td>
+          <td>{{ set.location }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <h2>Tournaments Results</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Placement</th>
+        <th>Player Name</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for result in results %}
+        <tr>
+          <td>{{ result.placement }}</td>
+          <td><a href="{% url 'player_detail' result.playerid.playerid %}">{{ result.playerid }}</a></td>
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="2">No tournaments found</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% endblock %}
