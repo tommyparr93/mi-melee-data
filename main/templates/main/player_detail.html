@@ -4,7 +4,8 @@
   <h1>{{ player.name }}</h1>
   <p><strong>Character: </strong>{{ player.character_main }}</p>
   <p><strong>Region: </strong>{{ player.region_code }}</p>
-  <p>Number of sets played: {{ sets.count }}</p>
+  <p>Number of tournaments entered: {{ calculations.3 }}</p>
+  <p>Number of sets played: {{ sets.count }} </p>
   <p>Number of sets won: {{ calculations.0 }}</p>
   <p>Number of sets lost: {{ calculations.1 }}</p>
   <p>Win Rate: {{ calculations.2 }}%</p>
@@ -32,12 +33,30 @@
       {% endfor %}
     </tbody>
   </table>
-  <h2>Tournaments</h2>
-  <ul>
-  {% for tournament in tournaments %}
-      <li>{{ tournament.name }}</li>
+
+<h2>H2H</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Opponent</th>
+        <th>Wins</th>
+        <th>Losses</th>
+        <th>W/R</th>
+      </tr>
+    </thead>
+  <tbody>
+  {% for opponent in opponents %}
+  <tr>
+    <td> {{opponent.name }} </td>
+    <td> {{opponent.wins }} </td>
+    <td> {{opponent.losses }} </td>
+    <td> {{opponent.win_rate }}% </td>
+  </tr>
   {% empty %}
-      <li>No tournaments found</li>
+    <tr>
+      <td colspan="3">No tournaments found</td>
+    </tr>
   {% endfor %}
-  </ul>
+  </tbody>
+  </table>
 {% endblock %}

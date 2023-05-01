@@ -1,5 +1,5 @@
 {% extends 'base.html' %}
-{% block title %}Player Details{% endblock %}
+{% block title %}Player List{% endblock %}
 {% block content %}
   <h1>Players</h1>
   <table>
@@ -13,7 +13,7 @@
     <tbody>
       {% for player in page_obj %}
         <tr>
-          <td><a href="{% url 'player_detail' player.playerid %}">{{ player.name }}</a></td>
+          <td><a href="{% url 'player_detail' pk=player.pk %}">{{ player.name }}</a></td>
           <td>{{ player.character_main }}</td>
           <td>{{ player.region_code }}</td>
         </tr>
