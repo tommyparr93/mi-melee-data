@@ -2,29 +2,18 @@ import time
 import json
 import psycopg2
 import datetime
-
 import pysmashgg
+import environ
+
+
 
 #smash gg token, please use your own
-smashggToken = ""
+env = environ.Env()
+environ.Env.read_env()
+smashggToken = env("SMASHGG_TOKEN")
 
 
 smash = pysmashgg.SmashGG(smashggToken, True)
-
-class Set:
-    def __init__(self, id, tournamentKey, p1id, p2id, p1name, p2name, winner, p1score, p2score, location, bestof, playedBool):
-        self.id = id;
-        self.tournamentKey = tournamentKey;
-        self.p1id = p1id;
-        self.p2id = p2id;
-        self.p1name = p1name;
-        self.p2name = p2name;
-        self.winner = winner;
-        self.p1score = p1score;
-        self.p2score = p2score;
-        self.location = location;
-        self.bestof = bestof;
-        self.playedBool = playedBool;
 
 
 # CREATING DATABASE CONNECTION AND FINDING ALL PLAYERS TO CHECK AGAINST
@@ -148,10 +137,6 @@ for i in data:
         print(set)
         # print(p1id, p2id, p1name, p2name, set_id, p1score, p2score, winner, bestOf, location, tournamentid, playedBool,
         #      sep='-')
-
-        # FINAL SET FORMAT
-        transformedSet = Set(set_id, tournamentid, p1id, p2id, p1name, p2name, winner, p1score, p2score, location,
-                                  bestOf, playedBool)
 
         # PROCESS SETS TO DATABASE
 

@@ -18,20 +18,21 @@ def players(request):
 def player_detail_calculations(player, sets):
     wins = sets.filter(winnerid=player.playerid).count()
     losses = sets.exclude(winnerid=player.playerid).count()
-    wr = (wins/sets.count())*100
+    wr = (wins / sets.count()) * 100
     num_tournaments = sets.values('tour').distinct().count()
     return [wins, losses, int(wr), num_tournaments]
 
 
 # it works but slow, need to speed up
+# need to start accounting for DQs in this model
 def get_head_to_head_results(player, sets):
 
-    l1 = sets.exclude(player1=player.playerid).values_list('player1_id', flat=True).distinct()
-    l2 = sets.exclude(player2=player.playerid).values_list('player2_id', flat=True).distinct()
-    opponents = set(l1) | set(l2)
+    opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
+    opponents.remove(player.playerid)
     opponents_queryset = Player.objects.filter(playerid__in=opponents).order_by('name')
 
     opponent_records = []
+
     for opponent in opponents_queryset:
         matches = sets.filter(Q(player1=opponent) | Q(player2=opponent))
         wins = 0
@@ -47,8 +48,12 @@ def get_head_to_head_results(player, sets):
             'wins': wins,
             'losses': losses,
             'win_rate': int(wr),
+            'count': wins + losses
         }
         opponent_records.append(opponent_record)
+
+    opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
+
     return opponent_records
 
 
@@ -69,6 +74,7 @@ class TournamentListView(generic.ListView):
     ordering = ['-date']
     queryset = Tournament.objects.all()
 
+
 # need to refactor have logic on this front to pass primary player and "opponent" within the sets context
 class PlayerDetailView(DetailView):
     model = Player
@@ -77,16 +83,24 @@ class PlayerDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.get_object()
-        sets = Set.objects.filter(Q(player1=player) | Q(player2=player))
-        context['sets'] = sets
-        context['opponents'] = get_head_to_head_results(player, sets)
-        # below is temporary --- remove when better solution is found to organize tournament info
-        # tournaments = Tournament.objects.filter(set__in=sets).distinct()
-        # context['tournaments'] = tournaments
+        sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tour__date')
+        # Sets Pagination
+        page_number = self.request.GET.get('page')
+        paginator = Paginator(sets, 25)
+        context['sets'] = paginator.get_page(page_number)
 
+        # H2H Pagination
+        context['h2h'] = get_head_to_head_results(player, sets)
+        page_number = self.request.GET.get('page')
+        paginator = Paginator(context['h2h'], 25)  # Show 10 opponents per page
+        opponents = paginator.get_page(page_number)
+        context['opponents'] = opponents
+
+        # below is temporary --- remove when better solution is found to organize tournament info
         context['calculations'] = player_detail_calculations(player, sets)
 
         return context
+
 
 class TournamentDetailView(DetailView):
     model = Tournament
@@ -100,6 +114,3 @@ class TournamentDetailView(DetailView):
         results = TournamentResults.objects.filter(tour=tournament.tour_id)
         context['results'] = results
         return context
-
-
-
