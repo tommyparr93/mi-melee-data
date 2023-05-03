@@ -4,13 +4,13 @@
     <h1>{{ player.name }}</h1>
     <p><strong>Region: </strong>{{ player.region_code }}</p>
     <p>Number of tournaments entered: {{ calculations.3 }}</p>
-    <p>Number of sets played: {{ sets.Count }} </p>
+    <p>Number of sets played: {{ sets.count }} </p>
     <p>Number of sets won: {{ calculations.0 }}</p>
     <p>Number of sets lost: {{ calculations.1 }}</p>
     <p>Win Rate: {{ calculations.2 }}%</p>
 
     <h2>Sets</h2>
-    <table>
+    <table class="table table-light">
     <thead>
       <tr>
         <th>Player 1</th>
