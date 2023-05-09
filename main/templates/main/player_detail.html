@@ -3,11 +3,56 @@
 {% block content %}
     <h1>{{ player.name }}</h1>
     <p><strong>Region: </strong>{{ player.region_code }}</p>
-    <p>Number of tournaments entered: {{ calculations.3 }}</p>
-    <p>Number of sets played: {{ sets.count }} </p>
-    <p>Number of sets won: {{ calculations.0 }}</p>
-    <p>Number of sets lost: {{ calculations.1 }}</p>
-    <p>Win Rate: {{ calculations.2 }}%</p>
+    <p>Number of tournaments entered: {{ calculations.tournament_count }}</p>
+    <p>Number of sets played: {{ calculations.set_count }} </p>
+    <p>Number of sets won: {{ calculations.wins }}</p>
+    <p>Number of sets lost: {{ calculations.losses }}</p>
+    <p>Win Rate: {{ calculations.win_rate }}%</p>
+
+<h2>H2H</h2>
+      <table class="table table-light">
+        <thead>
+          <tr>
+            <th>Opponent</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>W/R</th>
+          </tr>
+        </thead>
+      <tbody>
+      {% for opponent in opponents %}
+      <tr>
+          <td><a href="{% url 'player_detail' opponent.opponent.playerid %}"> {{opponent.opponent.name }} </a> </td>
+        <td> {{opponent.wins }} </td>
+        <td> {{opponent.losses }} </td>
+        <td> {{opponent.win_rate }}% </td>
+      </tr>
+      {% empty %}
+        <tr>
+          <td colspan="3">No tournaments found</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+      </table>
+      <div class="pagination">
+        <span class="step-links">
+            {% if opponents.has_previous %}
+                <a href="?page=1">&laquo; first</a>
+                <a href="?page={{ opponents.previous_page_number }}">previous</a>
+            {% endif %}
+
+            <span class="current-page">
+                Page {{ opponents.number }} of {{ opponents.paginator.num_pages }}.
+            </span>
+
+            {% if opponents.has_next %}
+                <a href="?page={{ opponents.next_page_number }}">next</a>
+                <a href="?page={{ opponents.paginator.num_pages }}">last &raquo;</a>
+            {% endif %}
+        </span>
+      </div>
+
+
 
     <h2>Sets</h2>
     <table class="table table-light">
@@ -52,46 +97,5 @@
       </span>
     </div>
 
-    <h2>H2H</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>Opponent</th>
-            <th>Wins</th>
-            <th>Losses</th>
-            <th>W/R</th>
-          </tr>
-        </thead>
-      <tbody>
-      {% for opponent in opponents %}
-      <tr>
-        <td> {{opponent.name }} </td>
-        <td> {{opponent.wins }} </td>
-        <td> {{opponent.losses }} </td>
-        <td> {{opponent.win_rate }}% </td>
-      </tr>
-      {% empty %}
-        <tr>
-          <td colspan="3">No tournaments found</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-      </table>
-      <div class="pagination">
-        <span class="step-links">
-            {% if opponents.has_previous %}
-                <a href="?page=1">&laquo; first</a>
-                <a href="?page={{ opponents.previous_page_number }}">previous</a>
-            {% endif %}
 
-            <span class="current-page">
-                Page {{ opponents.number }} of {{ opponents.paginator.num_pages }}.
-            </span>
-
-            {% if opponents.has_next %}
-                <a href="?page={{ opponents.next_page_number }}">next</a>
-                <a href="?page={{ opponents.paginator.num_pages }}">last &raquo;</a>
-            {% endif %}
-        </span>
-      </div>
 {% endblock %}

@@ -3,6 +3,10 @@
 {% block content %}
   <h1>Players</h1>
   <table class="table table-light">
+      <form method="get" action="{% url 'players' %}">
+            <input type="text" name="q" placeholder="Search players">
+            <button type="submit">Search</button>
+      </form>
     <thead>
       <tr>
         <th>Name</th>

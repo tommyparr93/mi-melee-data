@@ -1,26 +1,29 @@
 from django.http import HttpResponse
 from django.core.paginator import Paginator
-from django.shortcuts import render
 from .models import Player, Set, Tournament, TournamentResults
 from django.views import generic
 from django.db.models import Q
-from django.views import View
-from django.db.models import Value, Case, Sum, IntegerField, When
 from django.views.generic.detail import DetailView
-from itertools import chain
 
 
 def players(request):
     return HttpResponse("Hello world!")
 
 
-# do better lol
+# i have duplicate code in h2h, combine at some point
 def player_detail_calculations(player, sets):
     wins = sets.filter(winnerid=player.playerid).count()
     losses = sets.exclude(winnerid=player.playerid).count()
     wr = (wins / sets.count()) * 100
     num_tournaments = sets.values('tour').distinct().count()
-    return [wins, losses, int(wr), num_tournaments]
+    stats = {
+        'wins': wins,
+        'losses': losses,
+        'win_rate': int(wr),
+        'set_count': wins + losses,
+        'tournament_count': num_tournaments
+    }
+    return stats
 
 
 # it works but slow, need to speed up
@@ -44,7 +47,7 @@ def get_head_to_head_results(player, sets):
                 losses += 1
         wr = (wins / matches.count()) * 100
         opponent_record = {
-            'name': opponent.name,
+            'opponent': opponent,
             'wins': wins,
             'losses': losses,
             'win_rate': int(wr),
@@ -60,10 +63,16 @@ def get_head_to_head_results(player, sets):
 class PlayerListView(generic.ListView):
     model = Player
     template_name = 'main/players.html'
-    context_object_name = 'users'
     paginate_by = 25
     ordering = ['name']
     queryset = Player.objects.all()
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        query = self.request.GET.get('q')
+        if query:
+            queryset = queryset.filter(Q(name__icontains=query))
+        return queryset
 
 
 class TournamentListView(generic.ListView):
