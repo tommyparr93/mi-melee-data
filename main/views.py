@@ -1,9 +1,13 @@
 from django.http import HttpResponse
 from django.core.paginator import Paginator
+from django_filters.views import FilterView
+
+from .filters import PlayerFilter
 from .models import Player, Set, Tournament, TournamentResults
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
+
 
 
 def players(request):
@@ -70,8 +74,11 @@ class PlayerListView(generic.ListView):
     def get_queryset(self):
         queryset = super().get_queryset()
         query = self.request.GET.get('q')
+        region = self.request.GET.get('region')
         if query:
             queryset = queryset.filter(Q(name__icontains=query))
+        if region:
+            queryset = queryset.filter(Q(region_code__exact='7'))
         return queryset
 
 
