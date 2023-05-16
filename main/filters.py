@@ -1,9 +1,9 @@
-from django_filters import CharFilter, FilterSet
+from django_filters import CharFilter, FilterSet, ChoiceFilter
 from .models import Player
 
 class PlayerFilter(FilterSet):
-    name = CharFilter(field_name='name', lookup_expr='icontains')
+    region = ChoiceFilter(choices='region')
 
     class Meta:
         model = Player
-        fields = ['name']
+        fields = ['region']
