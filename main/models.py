@@ -123,7 +123,7 @@ class DjangoSession(models.Model):
 
 
 class Player(models.Model):
-    playerid = models.AutoField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     name = models.CharField(blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True)
     region_code = models.ForeignKey('Region', models.DO_NOTHING, db_column='region_code', blank=True, null=True)
@@ -135,7 +135,6 @@ class Player(models.Model):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'player'
 
 
@@ -147,7 +146,6 @@ class Region(models.Model):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'region'
 
 
@@ -166,14 +164,36 @@ class Set(models.Model):
         return f"{self.player1} vs {self.player2} @ {self.tour} {self.location}"
 
     class Meta:
-        managed = False
         db_table = 'set'
+
+
+class PRSeason(models.Model):
+    name = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    ranks = models.JSONField(default=list)  # Django 3.1 introduced a JSONField for all database backends.
+    hm = models.JSONField(default=list)  # Honourable Mentions (hm) are stored as JSON
+
+    class Meta:
+        db_table = 'pr_season'
+
+
+class PRSeasonResult(models.Model):
+
+    player = models.ForeignKey(Player, on_delete=models.CASCADE)
+    pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE)
+    rank = models.CharField(max_length=3)
+
+    class Meta:
+        db_table = 'pr_season_results'
+        unique_together = ('player', 'pr_season',)
 
 
 class Tournament(models.Model):
     tour_id = models.IntegerField(primary_key=True)
     name = models.CharField(blank=True, null=True)
     date = models.DateField(blank=True, null=True)
+    pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE, null=True, blank=True)
     region_code = models.ForeignKey(Region, models.DO_NOTHING, db_column='region_code', blank=True, null=True)
     entrant_count = models.IntegerField(blank=True, null=True)
     online = models.BooleanField(blank=True, null=True)
@@ -184,7 +204,6 @@ class Tournament(models.Model):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'tournament'
 
 
@@ -195,6 +214,7 @@ class TournamentResults(models.Model):
     placement = models.IntegerField(blank=True, null=True)
 
     class Meta:
-        managed = False
         db_table = 'tournament_results'
         unique_together = (('tour', 'playerid'),)
+
+

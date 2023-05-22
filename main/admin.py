@@ -1,4 +1,4 @@
-from .models import Player, Set, Tournament, Region
+from .models import Player, Set, Tournament, Region, PRSeason
 from django.contrib import admin
 
 
@@ -7,6 +7,7 @@ from django.contrib import admin
 admin.site.register(Set)
 admin.site.register(Tournament)
 admin.site.register(Region)
+admin.site.register(PRSeason)
 
 
 class PlayerAdmin(admin.ModelAdmin):

@@ -16,8 +16,8 @@ def players(request):
 
 # i have duplicate code in h2h, combine at some point
 def player_detail_calculations(player, sets):
-    wins = sets.filter(winnerid=player.playerid).count()
-    losses = sets.exclude(winnerid=player.playerid).count()
+    wins = sets.filter(winnerid=player.id).count()
+    losses = sets.exclude(winnerid=player.id).count()
     wr = (wins / sets.count()) * 100
     num_tournaments = sets.values('tour').distinct().count()
     stats = {
@@ -35,8 +35,8 @@ def player_detail_calculations(player, sets):
 def get_head_to_head_results(player, sets):
 
     opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
-    opponents.remove(player.playerid)
-    opponents_queryset = Player.objects.filter(playerid__in=opponents).order_by('name')
+    opponents.remove(player.id)
+    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
 
     opponent_records = []
 
@@ -45,7 +45,7 @@ def get_head_to_head_results(player, sets):
         wins = 0
         losses = 0
         for match in matches:
-            if match.winnerid == player.playerid:
+            if match.winnerid == player.id:
                 wins += 1
             else:
                 losses += 1

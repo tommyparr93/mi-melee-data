@@ -22,7 +22,7 @@
       <tbody>
       {% for opponent in opponents %}
       <tr>
-          <td><a href="{% url 'player_detail' opponent.opponent.playerid %}"> {{opponent.opponent.name }} </a> </td>
+          <td><a href="{% url 'player_detail' opponent.opponent.id %}"> {{opponent.opponent.name }} </a> </td>
         <td> {{opponent.wins }} </td>
         <td> {{opponent.losses }} </td>
         <td> {{opponent.win_rate }}% </td>
@@ -69,8 +69,8 @@
     <tbody>
       {% for set in sets %}
         <tr>
-          <td><a href="{% url 'player_detail' set.player1.playerid %}">{{ set.player1.name }}</a></td>
-          <td><a href="{% url 'player_detail' set.player2.playerid %}">{{ set.player2.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
           <td>{{ set.player1score }}</td>
           <td>{{ set.player2score }}</td>
           <td><a href="{% url 'tournament_details' pk=set.tour.pk %}">{{ set.tour.name }}</a></td>
