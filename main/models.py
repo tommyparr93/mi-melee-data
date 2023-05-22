@@ -129,7 +129,6 @@ class Player(models.Model):
     region_code = models.ForeignKey('Region', models.DO_NOTHING, db_column='region_code', blank=True, null=True)
     character_main = models.CharField(blank=True, null=True)
     character_alt = models.CharField(blank=True, null=True)
-    pr_rank = models.IntegerField(db_column='PR_rank', blank=True, null=True)  # Field name made lowercase.
 
     def __str__(self):
         return self.name
@@ -153,15 +152,15 @@ class Set(models.Model):
     id = models.IntegerField(primary_key=True)
     player1 = models.ForeignKey(Player, models.DO_NOTHING, db_column='player1', blank=True, null=True)
     player2 = models.ForeignKey(Player, models.DO_NOTHING, db_column='player2', related_name='sets_player2_set', blank=True, null=True)
-    player1score = models.IntegerField(blank=True, null=True)
-    player2score = models.IntegerField(blank=True, null=True)
-    winnerid = models.IntegerField(blank=True, null=True)
-    tour = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
+    player1_score = models.IntegerField(blank=True, null=True)
+    player2_score = models.IntegerField(blank=True, null=True)
+    winner_id = models.IntegerField(blank=True, null=True)
+    tournament = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
     location = models.CharField(blank=True, null=True)
     played = models.BooleanField(blank=True, null=True)
 
     def __str__(self):
-        return f"{self.player1} vs {self.player2} @ {self.tour} {self.location}"
+        return f"{self.player1} vs {self.player2} @ {self.tournament} {self.location}"
 
     class Meta:
         db_table = 'set'
@@ -171,8 +170,9 @@ class PRSeason(models.Model):
     name = models.CharField(max_length=255)
     start_date = models.DateField()
     end_date = models.DateField()
-    ranks = models.JSONField(default=list)  # Django 3.1 introduced a JSONField for all database backends.
-    hm = models.JSONField(default=list)  # Honourable Mentions (hm) are stored as JSON
+
+    def __str__(self):
+        return self.name
 
     class Meta:
         db_table = 'pr_season'
@@ -190,7 +190,7 @@ class PRSeasonResult(models.Model):
 
 
 class Tournament(models.Model):
-    tour_id = models.IntegerField(primary_key=True)
+    id = models.IntegerField(primary_key=True)
     name = models.CharField(blank=True, null=True)
     date = models.DateField(blank=True, null=True)
     pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE, null=True, blank=True)
@@ -207,14 +207,18 @@ class Tournament(models.Model):
         db_table = 'tournament'
 
 
+# something really funky is happening here due to django not liking composite keys
+# This is because I built the database with composite keys originally,
+# don't touch lmao
 class TournamentResults(models.Model):
-    tour = models.OneToOneField(Tournament, models.DO_NOTHING, primary_key=True)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
-    playerid = models.ForeignKey(Player, models.DO_NOTHING, db_column='playerid')
+    tournament = models.OneToOneField(Tournament, models.DO_NOTHING, primary_key=True)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
+    player_id = models.ForeignKey(Player, models.DO_NOTHING, db_column='player_id')
     name = models.CharField(blank=True, null=True)
     placement = models.IntegerField(blank=True, null=True)
 
     class Meta:
+        managed = False
         db_table = 'tournament_results'
-        unique_together = (('tour', 'playerid'),)
+        unique_together = (('tournament', 'player_id'),)
 
 

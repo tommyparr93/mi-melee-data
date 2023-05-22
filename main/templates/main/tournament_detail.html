@@ -21,8 +21,8 @@
         <tr>
           <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
           <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
-          <td>{{ set.player1score }}</td>
-          <td>{{ set.player2score }}</td>
+          <td>{{ set.player1_score }}</td>
+          <td>{{ set.player2_score }}</td>
           <td>{{ set.location }}</td>
         </tr>
       {% endfor %}
@@ -40,7 +40,7 @@
       {% for result in results %}
         <tr>
           <td>{{ result.placement }}</td>
-          <td><a href="{% url 'player_detail' result.playerid.id %}">{{ result.playerid }}</a></td>
+          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id }}</a></td>
         </tr>
       {% empty %}
         <tr>
