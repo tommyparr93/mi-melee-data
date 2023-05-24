@@ -158,6 +158,7 @@ class Set(models.Model):
     tournament = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
     location = models.CharField(blank=True, null=True)
     played = models.BooleanField(blank=True, null=True)
+    pr_eligible = models.BooleanField(default=True, null=False)
 
     def __str__(self):
         return f"{self.player1} vs {self.player2} @ {self.tournament} {self.location}"
