@@ -2,13 +2,7 @@
 {% block title %} {{ player.name }} Player Details{% endblock %}
 {% block content %}
     <div class="float-right">
-        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
-        <h1>{{ player.name }}</h1>
-    </div>
-    {% if player.main_account %}
-        <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
-    {% endif %}
-    <form method="get">
+            <form method="get" style="float: right">
         <select name="pr_season">
             <option value="">All Seasons</option>
             {% for pr_season in pr_seasons %}
@@ -20,6 +14,13 @@
         </select>
         <input type="submit" value="Filter">
     </form>
+        <h1>{{ player.name }}</h1>
+        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
+    </div>
+    {% if player.main_account %}
+        <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
+    {% endif %}
+
     <p><strong>Region: </strong>{{ player.region_code }}</p>
     <p>Number of tournaments entered: {{ calculations.tournament_count }}</p>
     <p>Number of sets played: {{ calculations.set_count }} </p>
