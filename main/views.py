@@ -2,7 +2,7 @@ from django.http import HttpResponse
 from django.core.paginator import Paginator
 from django_filters.views import FilterView
 from .filters import PlayerFilter
-from .models import Player, Set, Tournament, TournamentResults
+from .models import Player, Set, Tournament, TournamentResults, PRSeason
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
@@ -99,10 +99,26 @@ class PlayerDetailView(DetailView):
         player = self.get_object()
         sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
 
+        pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct()
+        context['pr_seasons'] = pr_seasons
+        pr_season_id = self.request.GET.get('pr_season')
+
+        if pr_season_id:
+            sets = Set.objects.filter(
+                Q(player1=player) | Q(player2=player),
+                tournament__pr_season_id=pr_season_id
+            ).order_by('-tournament__date')
+        else:
+            sets = Set.objects.filter(
+                Q(player1=player) | Q(player2=player)
+            ).order_by('-tournament__date')
+
         # Sets Pagination
         page_number = self.request.GET.get('page')
         paginator = Paginator(sets, 25)
         context['sets'] = paginator.get_page(page_number)
+
+
 
         # H2H Queries
         context['h2h'] = get_head_to_head_results(player, sets)
@@ -128,6 +144,6 @@ class TournamentDetailView(DetailView):
         tournament = self.get_object()
         sets = Set.objects.filter(tournament_id=tournament.id)
         context['sets'] = sets
-        results = TournamentResults.objects.filter(tournament_id=tournament)
+        results = TournamentResults.objects.filter(tournament_id=tournament).order_by('placement')
         context['results'] = results
         return context
