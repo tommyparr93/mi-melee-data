@@ -5,3 +5,5 @@ melee/__pycache__/
 __pycache__
 .env/save
 main/migrations/__pycache__/
+*/.env.save
+*.py[cod]
