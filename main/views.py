@@ -1,9 +1,8 @@
 from django.http import HttpResponse
 from django.core.paginator import Paginator
 from django_filters.views import FilterView
-
 from .filters import PlayerFilter
-from .models import Player, Set, Tournament, TournamentResults
+from .models import Player, Set, Tournament, TournamentResults, PRSeason
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
@@ -16,10 +15,10 @@ def players(request):
 
 # i have duplicate code in h2h, combine at some point
 def player_detail_calculations(player, sets):
-    wins = sets.filter(winnerid=player.playerid).count()
-    losses = sets.exclude(winnerid=player.playerid).count()
+    wins = sets.filter(winner_id=player.id).count()
+    losses = sets.exclude(winner_id=player.id).count()
     wr = (wins / sets.count()) * 100
-    num_tournaments = sets.values('tour').distinct().count()
+    num_tournaments = sets.values('tournament_id').distinct().count()
     stats = {
         'wins': wins,
         'losses': losses,
@@ -30,13 +29,12 @@ def player_detail_calculations(player, sets):
     return stats
 
 
-# it works but slow, need to speed up
 # need to start accounting for DQs in this model
 def get_head_to_head_results(player, sets):
 
     opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
-    opponents.remove(player.playerid)
-    opponents_queryset = Player.objects.filter(playerid__in=opponents).order_by('name')
+    opponents.remove(player.id)
+    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
 
     opponent_records = []
 
@@ -45,7 +43,7 @@ def get_head_to_head_results(player, sets):
         wins = 0
         losses = 0
         for match in matches:
-            if match.winnerid == player.playerid:
+            if match.winner_id == player.id:
                 wins += 1
             else:
                 losses += 1
@@ -99,20 +97,41 @@ class PlayerDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.get_object()
-        sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tour__date')
+        sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
+
+        pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct()
+        context['pr_seasons'] = pr_seasons
+        pr_season_id = self.request.GET.get('pr_season')
+
+        if pr_season_id:
+            sets = Set.objects.filter(
+                Q(player1=player) | Q(player2=player),
+                tournament__pr_season_id=pr_season_id
+            ).order_by('-tournament__date')
+        else:
+            sets = Set.objects.filter(
+                Q(player1=player) | Q(player2=player)
+            ).order_by('-tournament__date')
+
+        context['pr_season'] = pr_season_id
+
         # Sets Pagination
         page_number = self.request.GET.get('page')
         paginator = Paginator(sets, 25)
         context['sets'] = paginator.get_page(page_number)
 
-        # H2H Pagination
+
+
+        # H2H Queries
         context['h2h'] = get_head_to_head_results(player, sets)
+
+        # H2H Pagination
         page_number = self.request.GET.get('page')
         paginator = Paginator(context['h2h'], 25)  # Show 10 opponents per page
         opponents = paginator.get_page(page_number)
         context['opponents'] = opponents
 
-        # below is temporary --- remove when better solution is found to organize tournament info
+        # player detail calculations
         context['calculations'] = player_detail_calculations(player, sets)
 
         return context
@@ -125,8 +144,8 @@ class TournamentDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()
-        sets = Set.objects.filter(tour=tournament.tour_id)
+        sets = Set.objects.filter(tournament_id=tournament.id)
         context['sets'] = sets
-        results = TournamentResults.objects.filter(tour=tournament.tour_id)
+        results = TournamentResults.objects.filter(tournament_id=tournament).order_by('placement')
         context['results'] = results
         return context

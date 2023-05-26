@@ -1,7 +1,26 @@
 {% extends 'base.html' %}
 {% block title %} {{ player.name }} Player Details{% endblock %}
 {% block content %}
-    <h1>{{ player.name }}</h1>
+    <div class="float-right">
+            <form method="get" style="float: right">
+        <select name="pr_season">
+            <option value="">All Seasons</option>
+            {% for pr_season in pr_seasons %}
+            <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>
+                {{ pr_season.name }}
+            </option>
+            {% endfor %}
+
+        </select>
+        <input type="submit" value="Filter">
+    </form>
+        <h1>{{ player.name }}</h1>
+        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
+    </div>
+    {% if player.main_account %}
+        <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
+    {% endif %}
+
     <p><strong>Region: </strong>{{ player.region_code }}</p>
     <p>Number of tournaments entered: {{ calculations.tournament_count }}</p>
     <p>Number of sets played: {{ calculations.set_count }} </p>
@@ -22,7 +41,7 @@
       <tbody>
       {% for opponent in opponents %}
       <tr>
-          <td><a href="{% url 'player_detail' opponent.opponent.playerid %}"> {{opponent.opponent.name }} </a> </td>
+          <td><a href="{% url 'player_detail' opponent.opponent.id %}"> {{opponent.opponent.name }} </a> </td>
         <td> {{opponent.wins }} </td>
         <td> {{opponent.losses }} </td>
         <td> {{opponent.win_rate }}% </td>
@@ -35,22 +54,22 @@
       </tbody>
       </table>
       <div class="pagination">
-        <span class="step-links">
-            {% if opponents.has_previous %}
-                <a href="?page=1">&laquo; first</a>
-                <a href="?page={{ opponents.previous_page_number }}">previous</a>
-            {% endif %}
+    <span class="step-links">
+        {% if sets.has_previous %}
+            <a href="?page=1&pr_season={{ pr_season }}">« first</a>
+            <a href="?page={{ sets.previous_page_number }}&pr_season={{ pr_season }}">previous</a>
+        {% endif %}
 
-            <span class="current-page">
-                Page {{ opponents.number }} of {{ opponents.paginator.num_pages }}.
-            </span>
-
-            {% if opponents.has_next %}
-                <a href="?page={{ opponents.next_page_number }}">next</a>
-                <a href="?page={{ opponents.paginator.num_pages }}">last &raquo;</a>
-            {% endif %}
+        <span class="current-page">
+            Page {{ sets.number }} of {{ sets.paginator.num_pages }}.
         </span>
-      </div>
+
+        {% if sets.has_next %}
+            <a href="?page={{ sets.next_page_number }}&pr_season={{ pr_season }}">next</a>
+            <a href="?page={{ sets.paginator.num_pages }}&pr_season={{ pr_season }}">last »</a>
+        {% endif %}
+    </span>
+    </div>
 
 
 
@@ -64,17 +83,20 @@
         <th>Player 2 Score</th>
         <th>Tournament</th>
         <th>Date</th>
+          <th>Admin</th>
       </tr>
     </thead>
     <tbody>
       {% for set in sets %}
         <tr>
-          <td><a href="{% url 'player_detail' set.player1.playerid %}">{{ set.player1.name }}</a></td>
-          <td><a href="{% url 'player_detail' set.player2.playerid %}">{{ set.player2.name }}</a></td>
-          <td>{{ set.player1score }}</td>
-          <td>{{ set.player2score }}</td>
-          <td><a href="{% url 'tournament_details' pk=set.tour.pk %}">{{ set.tour.name }}</a></td>
-          <td>{{ set.tour.date }}</td>
+          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
+          <td>{{ set.player1_score }}</td>
+          <td>{{ set.player2_score }}</td>
+          <td><a href="{% url 'tournament_details' pk=set.tournament.pk %}">{{ set.tournament.name }}</a></td>
+          <td>{{ set.tournament.date }}</td>
+          <td>  <a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit
+        </button></a> </td>
         </tr>
       {% endfor %}
     </tbody>

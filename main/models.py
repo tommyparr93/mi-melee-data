@@ -1,10 +1,4 @@
-# This is an auto-generated Django model module.
-# You'll have to do the following manually to clean this up:
-#   * Rearrange models' order
-#   * Make sure each model has one field with primary_key=True
-#   * Make sure each ForeignKey and OneToOneField has `on_delete` set to the desired behavior
-#   * Remove `managed = False` lines if you wish to allow Django to create, modify, and delete the table
-# Feel free to rename the models, but don't rename db_table values or field names.
+# Django model that represents the database
 from django.db import models
 
 
@@ -123,19 +117,18 @@ class DjangoSession(models.Model):
 
 
 class Player(models.Model):
-    playerid = models.AutoField(primary_key=True)
+    id = models.AutoField(primary_key=True)
     name = models.CharField(blank=True, null=True)
     created_at = models.DateTimeField(blank=True, null=True)
     region_code = models.ForeignKey('Region', models.DO_NOTHING, db_column='region_code', blank=True, null=True)
     character_main = models.CharField(blank=True, null=True)
     character_alt = models.CharField(blank=True, null=True)
-    pr_rank = models.IntegerField(db_column='PR_rank', blank=True, null=True)  # Field name made lowercase.
+    main_account = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'player'
 
 
@@ -147,7 +140,6 @@ class Region(models.Model):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'region'
 
 
@@ -155,25 +147,50 @@ class Set(models.Model):
     id = models.IntegerField(primary_key=True)
     player1 = models.ForeignKey(Player, models.DO_NOTHING, db_column='player1', blank=True, null=True)
     player2 = models.ForeignKey(Player, models.DO_NOTHING, db_column='player2', related_name='sets_player2_set', blank=True, null=True)
-    player1score = models.IntegerField(blank=True, null=True)
-    player2score = models.IntegerField(blank=True, null=True)
-    winnerid = models.IntegerField(blank=True, null=True)
-    tour = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
+    player1_score = models.IntegerField(blank=True, null=True)
+    player2_score = models.IntegerField(blank=True, null=True)
+    winner_id = models.IntegerField(blank=True, null=True)
+    tournament = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
     location = models.CharField(blank=True, null=True)
     played = models.BooleanField(blank=True, null=True)
+    pr_eligible = models.BooleanField(default=True, null=False)
 
     def __str__(self):
-        return f"{self.player1} vs {self.player2} @ {self.tour} {self.location}"
+        return f"{self.player1} vs {self.player2} @ {self.tournament} {self.location}"
 
     class Meta:
-        managed = False
         db_table = 'set'
 
 
+class PRSeason(models.Model):
+    name = models.CharField(max_length=255)
+    start_date = models.DateField()
+    end_date = models.DateField()
+    is_active = models.BooleanField(default=False, null=False)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        db_table = 'pr_season'
+
+
+class PRSeasonResult(models.Model):
+
+    player = models.ForeignKey(Player, on_delete=models.CASCADE)
+    pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE)
+    rank = models.CharField(max_length=3)
+
+    class Meta:
+        db_table = 'pr_season_results'
+        unique_together = ('player', 'pr_season',)
+
+
 class Tournament(models.Model):
-    tour_id = models.IntegerField(primary_key=True)
+    id = models.IntegerField(primary_key=True)
     name = models.CharField(blank=True, null=True)
     date = models.DateField(blank=True, null=True)
+    pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE, null=True, blank=True)
     region_code = models.ForeignKey(Region, models.DO_NOTHING, db_column='region_code', blank=True, null=True)
     entrant_count = models.IntegerField(blank=True, null=True)
     online = models.BooleanField(blank=True, null=True)
@@ -184,17 +201,21 @@ class Tournament(models.Model):
         return self.name
 
     class Meta:
-        managed = False
         db_table = 'tournament'
 
 
+# something really funky is happening here due to django not liking composite keys
+# This is because I built the database with composite keys originally,
+# don't touch lmao
 class TournamentResults(models.Model):
-    tour = models.OneToOneField(Tournament, models.DO_NOTHING, primary_key=True)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
-    playerid = models.ForeignKey(Player, models.DO_NOTHING, db_column='playerid')
+    tournament = models.OneToOneField(Tournament, models.DO_NOTHING, primary_key=True)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
+    player_id = models.ForeignKey(Player, models.DO_NOTHING, db_column='player_id')
     name = models.CharField(blank=True, null=True)
     placement = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'tournament_results'
-        unique_together = (('tour', 'playerid'),)
+        unique_together = (('tournament', 'player_id'),)
+
+
