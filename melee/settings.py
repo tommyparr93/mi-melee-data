@@ -30,7 +30,7 @@ SECRET_KEY = env("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = ['localhost', '18.219.218.10', '172.26.8.252', '127.0.0.1']
+ALLOWED_HOSTS = ['localhost','mimeleestats.com', 'www.mimeleestats.com', '52.15.190.122', '127.0.0.1']
 
 
 # Application definition
