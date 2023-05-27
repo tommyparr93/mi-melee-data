@@ -9,4 +9,5 @@ urlpatterns = [
     path('tournaments', views.TournamentListView.as_view(), name='tournaments'),
     path('tournaments/<int:pk>', views.TournamentDetailView.as_view(), name='tournament_details'),
     path('regions', views.PlayerListView.as_view(), name='regions'),
+    path('tournament_form', views.put_tournament, name='tournament_form'),
 ]

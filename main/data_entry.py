@@ -1,0 +1,162 @@
+import datetime
+
+import environ
+import re
+
+from contextlib import contextmanager
+import itertools
+
+from .models import Player, Set, Tournament, TournamentResults, PRSeason
+from django.db import models
+from django.http import HttpResponseRedirect
+from django.shortcuts import reverse, redirect
+import pysmashgg
+
+
+def extract_url_values(url):
+    pattern = r"/tournament/(?P<tournament_slug>[\w-]+)/event/(?P<event_name>[\w-]+)"
+    matches = re.search(pattern, url)
+    if matches:
+        return matches.groupdict()
+    return {}
+
+
+def tournament_exists(tournament_id) -> bool:
+    print(f'tournament_exists: {tournament_id}')
+
+    tournament = Tournament.objects.filter(pk=tournament_id)
+    return True if tournament else False
+
+
+def set_exists(set_id) -> bool:
+    print(f'set_exists: {set_id}')
+
+    melee_set = Set.objects.filter(pk=set_id)
+    return True if melee_set else False
+
+
+def exists(model: models.Model, pk) -> bool:
+    print(f'exists: {pk}')
+
+    entries = model.objects.filter(id=pk)
+    return True if entries else False
+
+
+def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
+
+    env = environ.Env()
+    environ.Env.read_env()
+    smashggToken = env('SMASHGG_TOKEN')
+
+    smash = pysmashgg.SmashGG(smashggToken, True)
+
+    player_list = Player.objects.all() or []
+    player_list = [player.id for player in player_list]
+
+    tournament_list = Tournament.objects.all() or []
+    tournament_list = [tournament.id for tournament in tournament_list]
+
+    set_list = Set.objects.all() or []
+    set_list = [set.id for set in set_list]
+
+    #tournament_results_list = TournamentResults.objects.all() or []
+    #for tournament_results in tournament_results_list:
+    #    print(tournament_results)
+    #tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
+
+    tournament_info = extract_url_values(tournament_url)
+    tournament_slug = tournament_info['tournament_slug']
+    event_name = tournament_info['event_name']
+
+    tournament = smash.tournament_show(tournament_slug)
+    print(tournament)
+    t_name = tournament['name']
+    t_date = datetime.datetime.fromtimestamp(tournament['startTimestamp'])
+    t_city = tournament['city']
+    t_entrants = tournament['entrants']
+
+    events = smash.tournament_show_events(tournament_slug)
+    event_id = 0
+    for event in events:
+        print(event)
+        if event['slug'] == event_name:
+            event_id = event['id']
+            break
+    print(f'Event ID: {event_id}')
+
+    if not exists(Tournament, event_id):
+        print(f'tournament {tournament_slug} not in DB, adding tournament {tournament_slug}')
+        print('Getting pr season for tournament')
+        pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
+        Tournament.objects.create(
+            id=event_id,
+            name=t_name,
+            date=t_date,
+            city=t_city,
+            entrant_count=t_entrants,
+            pr_season=None if not pr_season else pr_season
+        ).save()
+
+        i = 1
+        get_sets = smash.event_show_sets(event_id, 1)
+        sets = []
+        while len(get_sets) > 0:
+            sets.extend(get_sets)
+            i += 1
+            get_sets = smash.event_show_sets(event_id, i)
+
+        for melee_set in sets:
+
+            player1 = melee_set['entrant1Players'][0]['playerId']
+            player2 = melee_set['entrant2Players'][0]['playerId']
+
+            for player in player1, player2:
+                if not exists(Player, player):
+                    player_info = smash.player_show_info(player)
+                    # TODO assign region info here as well
+                    Player.objects.create(
+                        id=player,
+                        name=player_info['name']
+                    )
+
+            p1score = melee_set['entrant1Score']
+            p2score = melee_set['entrant2Score']
+
+            if p1score > p2score:
+                winner = player1
+                bestOf = 3 if p1score == 2 else 5 if p1score == 3 else None
+            else:
+                winner = player2
+                bestOf = 3 if p2score == 2 else 5 if p2score == 3 else None
+
+            playedBool = (p1score + p2score) >= 0
+
+            if melee_set['id'] not in set_list:
+                Set.objects.create(
+                    id=melee_set['id'],
+                    player1=Player.objects.get(id=player1),
+                    player2=Player.objects.get(id=player2),
+                    player1_score=p1score,
+                    player2_score=p2score,
+                    winner_id=winner,
+                    tournament_id=event_id,
+                    location=melee_set['fullRoundText'],
+                    played=playedBool,
+                    pr_eligible=is_pr_eligible
+                ).save()
+        """
+        results = smash.tournament_show_lightweight_results(tournament_slug, event_name, 1)
+        print(f'results: {results}')
+        for result in results:
+            player_id = result['playerid']
+            placement = result['placement']
+
+            if (event_id, player_id) not in tournament_results_list:
+                TournamentResults.objects.create(
+                    tournament_id=event_id,
+                    player_id=Player.objects.get(id=player_id),
+                    placement=placement
+                ).save()"""
+
+    return redirect(reverse('tournament_details', kwargs={'pk': event_id}))
+

@@ -3,10 +3,12 @@ from django.core.paginator import Paginator
 from django_filters.views import FilterView
 from .filters import PlayerFilter
 from .models import Player, Set, Tournament, TournamentResults, PRSeason
+from .forms import TournamentForm
+from .data_entry import enter_tournament
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
-
+from django.shortcuts import render
 
 
 def players(request):
@@ -60,6 +62,21 @@ def get_head_to_head_results(player, sets):
     opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
 
     return opponent_records
+
+
+def put_tournament(request):
+
+    if request.method == 'POST':
+        form = TournamentForm(request.POST)
+        if form.is_valid():
+            cleaned_data = form.cleaned_data
+            tournament_url = cleaned_data['tournament_url']
+            is_pr_eligible = cleaned_data['is_pr_eligible']
+            print(tournament_url)
+            return enter_tournament(tournament_url, is_pr_eligible)
+    else:
+        context = {'form': TournamentForm()}
+        return render(request, 'main/tournament_form.html', context)
 
 
 class PlayerListView(generic.ListView):

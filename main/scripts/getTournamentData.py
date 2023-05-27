@@ -15,10 +15,15 @@ smashggToken = env("SMASHGG_TOKEN")
 
 smash = pysmashgg.SmashGG(smashggToken, True)
 
+dbName = env("DB_NAME")
+dbUser = env("DB_USER")
+dbPassword = env("DB_PASSWORD")
+dbHost = env("DB_HOST")
+dbPort = env("DB_PORT")
 
 # CREATING DATABASE CONNECTION AND FINDING ALL PLAYERS TO CHECK AGAINST
 print("Connecting to DB")
-conn = psycopg2.connect("GRAB FROM ENV")
+conn = psycopg2.connect(dbname=dbName, user=dbUser, password=dbPassword, host=dbHost, port=dbPort)
 # print(results)
 
 # create a cursor for  postgres database
@@ -41,7 +46,7 @@ for t in t_query:
     t_list.append(t[0])
 
 print("Finding all tournaments results from database")
-cur.execute("SELECT tour_id, playerid FROM tournament_results;")
+cur.execute("SELECT tournament_id, player_id FROM tournament_results;")
 t_results_query = cur.fetchall()
 
 
@@ -83,7 +88,7 @@ for i in data:
     # Checking / adding tournament
     if event_id not in t_list:
         print("tournament ", t_name, " not in DB, adding tournament", t_name)
-        SQL = "INSERT INTO tournament (tour_id, name, date, city, entrant_count) VALUES (%s, %s,%s, %s, %s);"  # Note: no quotes
+        SQL = "INSERT INTO tournament (id, name, date, city, entrant_count) VALUES (%s, %s,%s, %s, %s);"  # Note: no quotes
         data = (event_id, t_name, t_date, t_city, t_entrants,)
         cur.execute(SQL, data)
         conn.commit()
@@ -143,7 +148,7 @@ for i in data:
         # Check Player vs DB, add if not found
         if p1id not in player_list:
             print("Player ", p1name, " not in DB, adding player", p1name)
-            SQL = "INSERT INTO player (playerid, name) VALUES (%s, %s);"  #
+            SQL = "INSERT INTO player (id, name) VALUES (%s, %s);"  #
             data = (p1id, p1name)
             cur.execute(SQL, data)
             player_list.append(p1id)
@@ -151,7 +156,7 @@ for i in data:
 
         if p2id not in player_list:
             print("Player ", p2name, " not in DB, adding player", p2name)
-            SQL = "INSERT INTO player (playerid, name) VALUES (%s, %s);"
+            SQL = "INSERT INTO player (id, name) VALUES (%s, %s);"
             data = (p2id, p2name)
             cur.execute(SQL, data)
             player_list.append(p2id)
@@ -160,7 +165,7 @@ for i in data:
         # now that players / tournament are in DB, attempt to add set
         if set_id not in s_list:
             print("Set is not in DB")
-            SQL = "INSERT INTO set (id, player1, player2, player1score, player2score, winnerid, tour_id, " \
+            SQL = "INSERT INTO set (id, player1, player2, player1_score, player2_score, winner_id, tournament_id, " \
                   " location, played) " \
                   "VALUES " \
                   "(%s, %s,%s, %s, %s, %s, %s, %s, %s);"
@@ -180,7 +185,7 @@ for i in data:
         pair = (event_id, p_result_id)
         t_results_query.extend(pair)
         if pair not in t_results_query:
-            SQL = "INSERT INTO tournament_results (tour_id, playerid, placement) VALUES (%s, %s, %s);"  # Note: no quotes
+            SQL = "INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s);"  # Note: no quotes
             data = (event_id, p_result_id, placement)
             cur.execute(SQL, data)
             conn.commit()
