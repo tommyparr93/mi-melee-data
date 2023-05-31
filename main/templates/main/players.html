@@ -12,7 +12,7 @@
     <thead>
       <tr>
         <th>Name</th>
-        <th>Character</th>
+<!-- hide until characters assigned          <th>Character</th>-->
         <th>Region</th>
       </tr>
     </thead>
@@ -20,7 +20,7 @@
       {% for player in page_obj %}
         <tr>
           <td><a href="{% url 'player_detail' pk=player.pk %}">{{ player.name }}</a></td>
-          <td>{{ player.character_main }}</td>
+<!-- hide until characters assigned          <td>{{ player.character_main }}</td>-->
           <td>{{ player.region_code }}</td>
         </tr>
       {% endfor %}
