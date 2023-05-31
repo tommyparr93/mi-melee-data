@@ -1,0 +1,53 @@
+{% extends 'base.html' %}
+{% block title %}Pr form{% endblock %}
+{% block content %}
+<h1>PR RESULTS FORM</h1>
+<form method="post" id="pr-season-form">
+  {% csrf_token %}
+
+  {{ pr_season_form.as_p }}
+
+  <fieldset id="pr-season-results-fieldset">
+    <legend>PR Season Results</legend>
+    {{ pr_season_result_formset.management_form }}
+
+    {% for form in pr_season_result_formset %}
+      <div class="pr-season-result-form">
+        {{ form.as_table }}
+      </div>
+    {% endfor %}
+  </fieldset>
+
+  <button type="button" id="add-pr-season-result-btn">Add PR Season Result</button>
+  <button type="submit">Save</button>
+</form>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+$(document).ready(function() {
+  var formCount = document.getElementById('id_form-TOTAL_FORMS').value;
+
+  $('#add-pr-season-result-btn').click(function() {
+    var newFormIndex = formCount;
+    var formPrefix = 'pr_season_results';
+
+    var form = $('.pr-season-result-form:last').clone(true);
+    form.find(':input').each(function() {
+      var name = $(this).attr('name').replace('-' + (newFormIndex - 1) + '-', '-' + newFormIndex + '-');
+      var id = 'id_' + name;
+      $(this).attr({'name': name, 'id': id}).val('').removeAttr('checked');
+    });
+
+    form.find('label').each(function() {
+      var newFor = $(this).attr('for').replace('-' + (newFormIndex - 1) + '-', '-' + newFormIndex + '-');
+      $(this).attr('for', newFor);
+    });
+
+    form.insertAfter('.pr-season-result-form:last');
+    newFormIndex++;
+
+    formCount = newFormIndex;
+    document.getElementById('id_form-TOTAL_FORMS').value = formCount;
+  });
+});
+</script>
+{% endblock %}

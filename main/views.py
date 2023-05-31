@@ -3,12 +3,12 @@ from django.core.paginator import Paginator
 from django_filters.views import FilterView
 from .filters import PlayerFilter
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
-from .forms import TournamentForm, PRForm, PRSeasonForm
+from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
-from django.shortcuts import render
+from django.shortcuts import render, reverse, redirect
 
 
 def players(request):
@@ -98,7 +98,37 @@ def process_pr_csv(request):
 
 def create_pr_season(request):
     if request.method == 'POST':
-        form = PRSeasonForm(request.POST)
+        pr_season_form = PRSeasonForm(request.POST)
+        pr_season_result_formset = PRSeasonResultFormSet(request.POST)
+
+        if pr_season_form.is_valid() and pr_season_result_formset.is_valid():
+            pr_season = pr_season_form.cleaned_data['pr_season']
+
+            for pr_result in pr_season_result_formset.cleaned_data:
+                pr_result_create = PRSeasonResult.objects.create(
+                    pr_season_id=pr_season.id,
+                    player=pr_result['player'],
+                    rank=pr_result['rank']
+                ).save()
+
+            # Redirect or do something else
+            return redirect(reverse('pr_season_details', kwargs={'pk': pr_season.id}))
+    else:
+        pr_season_form = PRSeasonForm()
+        pr_season_result_formset = PRSeasonResultFormSet(queryset=PRSeasonResult.objects.none())
+        pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7)
+
+    context = {
+        'pr_season_form': pr_season_form,
+        'pr_season_result_formset': pr_season_result_formset,
+    }
+
+    return render(request, 'main/create_pr_season.html', context)
+
+
+def create_pr_season1(request):
+    if request.method == 'POST':
+        form = PRSeasonForm1(request.POST)
         if form.is_valid():
             cleaned_date = form.cleaned_data
             season_name = cleaned_date['season_name']
@@ -109,7 +139,7 @@ def create_pr_season(request):
             return enter_pr_season(season_name, season_start, season_end, is_active)
 
     else:
-        form = PRSeasonForm()
+        form = PRSeasonForm1()
 
     return render(request, 'main/pr_season_form.html', {'form': form})
 
