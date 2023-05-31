@@ -1,4 +1,6 @@
+import csv
 import datetime
+import io
 
 import environ
 import re
@@ -6,9 +8,12 @@ import re
 from contextlib import contextmanager
 import itertools
 
-from .models import Player, Set, Tournament, TournamentResults, PRSeason
+import psycopg2
+
+from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from django.db import models
 from django.http import HttpResponseRedirect
+from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.shortcuts import reverse, redirect
 import pysmashgg
 
@@ -42,11 +47,41 @@ def exists(model: models.Model, pk) -> bool:
     return True if entries else False
 
 
+def enter_pr_csv(pr_csv: InMemoryUploadedFile, pr_season: PRSeason):
+    decoded_file = pr_csv.read().decode('utf-8')
+    io_string = io.StringIO(decoded_file)
+    reader = csv.reader(io_string)
+
+    for line in reader:
+        PRSeasonResult.objects.create(
+            rank=line[0],
+            player_id=line[2],
+            pr_season_id=pr_season.pk
+        ).save()
+
+    return pr_season
+
+
+def enter_pr_season(name: str, start_date: datetime.datetime, end_date: datetime.datetime, is_active: bool = False):
+    PRSeason.objects.create(
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        is_active=is_active
+    ).save()
+    return redirect(reverse('pr_season_details', kwargs={'pk': PRSeason.objects.get(name=name).id}))
+
+
 def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
 
     env = environ.Env()
     environ.Env.read_env()
     smashggToken = env('SMASHGG_TOKEN')
+    dbName = env("DB_NAME")
+    dbUser = env("DB_USER")
+    dbPassword = env("DB_PASSWORD")
+    dbHost = env("DB_HOST")
+    dbPort = env("DB_PORT")
 
     smash = pysmashgg.SmashGG(smashggToken, True)
 
@@ -58,11 +93,6 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
 
     set_list = Set.objects.all() or []
     set_list = [set.id for set in set_list]
-
-    #tournament_results_list = TournamentResults.objects.all() or []
-    #for tournament_results in tournament_results_list:
-    #    print(tournament_results)
-    #tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
 
     tournament_info = extract_url_values(tournament_url)
     tournament_slug = tournament_info['tournament_slug']
@@ -144,6 +174,28 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                     played=playedBool,
                     pr_eligible=is_pr_eligible
                 ).save()
+
+        tournament_results_list = TournamentResults.objects.all() or []
+        tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
+
+        conn = psycopg2.connect(dbname=dbName, user=dbUser, password=dbPassword, host=dbHost, port=dbPort)
+        cur = conn.cursor()
+
+        results = smash.tournament_show_lightweight_results(tournament_slug, event_name, 1)
+        print(f'results: {results}')
+        for result in results:
+            player_id = result['playerid']
+            placement = result['placement']
+
+            if (event_id, player_id) not in tournament_results_list:
+                sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s)'
+                query_parameters = (event_id, player_id, placement)
+                cur.execute(sql_query, query_parameters)
+                conn.commit()
+
+        conn.close()
+
+
         """
         results = smash.tournament_show_lightweight_results(tournament_slug, event_name, 1)
         print(f'results: {results}')

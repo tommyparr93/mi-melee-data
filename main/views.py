@@ -2,9 +2,9 @@ from django.http import HttpResponse
 from django.core.paginator import Paginator
 from django_filters.views import FilterView
 from .filters import PlayerFilter
-from .models import Player, Set, Tournament, TournamentResults, PRSeason
-from .forms import TournamentForm
-from .data_entry import enter_tournament
+from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
+from .forms import TournamentForm, PRForm, PRSeasonForm
+from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
 from django.db.models import Q
 from django.views.generic.detail import DetailView
@@ -79,6 +79,41 @@ def put_tournament(request):
         return render(request, 'main/tournament_form.html', context)
 
 
+def process_pr_csv(request):
+    if request.method == 'POST':
+        form = PRForm(request.POST, request.FILES)
+        if form.is_valid():
+            csv_file = request.FILES['csvfile']
+            if csv_file.content_type != 'text/csv':
+                return render(request, 'main/pr_form.html',
+                              {'form': form, 'error': 'Invalid file type. Only CSV files are allowed.'})
+
+        enter_pr_csv(csv_file, form.cleaned_data['pr_season'])
+
+    else:
+        form = PRForm()
+
+    return render(request, 'main/pr_form.html', {'form': form})
+
+
+def create_pr_season(request):
+    if request.method == 'POST':
+        form = PRSeasonForm(request.POST)
+        if form.is_valid():
+            cleaned_date = form.cleaned_data
+            season_name = cleaned_date['season_name']
+            is_active = cleaned_date['is_active']
+            season_start = cleaned_date['season_start']
+            season_end = cleaned_date['season_end']
+
+            return enter_pr_season(season_name, season_start, season_end, is_active)
+
+    else:
+        form = PRSeasonForm()
+
+    return render(request, 'main/pr_season_form.html', {'form': form})
+
+
 class PlayerListView(generic.ListView):
     model = Player
     template_name = 'main/players.html'
@@ -151,6 +186,19 @@ class PlayerDetailView(DetailView):
         # player detail calculations
         context['calculations'] = player_detail_calculations(player, sets)
 
+        return context
+
+
+class PrSeasonDetailView(DetailView):
+    model = PRSeason
+    template_name = 'main/pr_season_detail.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        pr_season = self.get_object()
+        context['pr_season'] = pr_season
+        pr_members = PRSeasonResult.objects.filter(pr_season_id=pr_season.pk)
+        context['pr_members'] = pr_members
         return context
 
 

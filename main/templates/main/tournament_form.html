@@ -1,5 +1,9 @@
+{% extends 'base.html' %}
+{% block title %}Tournament form{% endblock %}
+{% block content %}
 <form action = "" method = "post">
     {% csrf_token %}
     {{form }}
     <input type="submit" value="Submit">
 </form>
+{% endblock %}

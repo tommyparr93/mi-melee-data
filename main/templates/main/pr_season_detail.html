@@ -1,0 +1,26 @@
+{% extends 'base.html' %}
+{% block title %}Current Pr{% endblock %}
+{% block content %}
+    <h1>{{ pr_season.name }}</h1>
+    <p><strong>Start date:</strong> {{ pr_season.start_date }}</p>
+    <p><strong>End date:</strong> {{ pr_season.end_date }}</p>
+    <p><strong>Active PR</strong> {{ pr_season.is_active }}</p>
+    <h2>Members</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Rank</th>
+                <th>Player</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for pr_member in pr_members %}
+            <tr>
+                <td>{{ pr_member.rank }}</td>
+                <td><a href="{% url 'player_detail' pr_member.player.id %}">{{ pr_member.player.name }}</a></td>
+
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+{% endblock %}
