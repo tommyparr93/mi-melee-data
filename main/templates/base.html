@@ -26,13 +26,23 @@
     <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'pr_season_details' current_pr.id %}">Pr</a>
     </li>
-    <li class="nav-item">
-      <a class="nav-link link-light" href="/admin">Admin</a>
-    </li>
+     <li class="btn-group dropdown">
+        <a href="/admin" type="button" class="btn btn-danger">
+          Admin
+        </a>
+       <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown"></button>
+        <ul class="dropdown-menu">
+          <li><a class="dropdown-item" href="{% url 'tournament_form' %}">Tournament Form</a></li>
+          <li><a class="dropdown-item" href="{% url 'pr_form' %}">Pr Results Form</a></li>
+          <li><a class="dropdown-item" href="{% url 'pr_season_form' %}">Pr Seasons Form</a></li>
+        </ul>
+     </li>
+
   </ul>
     <main>
       {% block content %}
       {% endblock %}
     </main>
+
   </body>
 </html>
