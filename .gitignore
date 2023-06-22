@@ -7,3 +7,4 @@ __pycache__
 main/migrations/__pycache__/
 */.env.save
 *.py[cod]
+venv/
