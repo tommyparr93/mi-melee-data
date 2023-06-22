@@ -6,9 +6,13 @@ Django==4.2
 django-bootstrap-v5==1.0.11
 django-environ==0.10.0
 django-filter==23.2
+huggingface_hub
 idna==3.4
+langchain==0.0.207
+openai==0.27.8
 psycopg2==2.9.6
 pysmashgg==1.2.0.1
+python-dotenv
 requests==2.29.0
 soupsieve==2.4.1
 sqlparse==0.4.4
