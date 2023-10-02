@@ -1,10 +1,12 @@
 {% extends 'base.html' %}
 {% block title %}Tournament form{% endblock %}
 {% block content %}
+{% if user.is_superuser %}
 <h1>Tournament Form</h1>
 <form action = "" method = "post">
     {% csrf_token %}
     {{form }}
     <input type="submit" value="Submit">
 </form>
+{% endif %}
 {% endblock %}

@@ -40,7 +40,7 @@
       {% for result in results %}
         <tr>
           <td>{{ result.placement }}</td>
-          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id }}</a></td>
+          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id.name }}</a></td>
         </tr>
       {% empty %}
         <tr>

@@ -1,10 +1,13 @@
 {% extends 'base.html' %}
 {% block title %}Pr form{% endblock %}
 {% block content %}
+{% if user.is_superuser %}
+
 <h1>Pr Results Form</h1>
 <form method="POST" enctype="multipart/form-data">
     {% csrf_token %}
     {{ form }}
     <button type="submit">Submit</button>
 </form>
+{% endif %}
 {% endblock %}
