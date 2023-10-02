@@ -195,7 +195,8 @@ class PlayerDetailView(DetailView):
                 Q(player1=player) | Q(player2=player)
             ).order_by('-tournament__date')
 
-        context['pr_season'] = pr_season_id
+        if pr_season_id:
+            context['pr_season'] = pr_season_id
 
         # Sets Pagination
         page_number = self.request.GET.get('page')
