@@ -114,7 +114,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
             event_id = event['id']
             break
     print(f'Event ID: {event_id}')
-
+    sets_to_create = []
     if not exists(Tournament, event_id):
         with transaction.atomic():
             print(f'tournament {tournament_slug} not in DB, adding tournament {tournament_slug}')
@@ -138,7 +138,8 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                 get_sets = smash.event_show_sets(event_id, i)
 
             players_to_create = []
-            sets_to_create = []
+
+
             for melee_set in sets:
 
                 player1 = melee_set['entrant1Players'][0]['playerId']
@@ -160,11 +161,13 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         id=player1,
                         name=p1name
                     )
+                    player_list.append(player1)
                 if player2 not in player_list:
                     Player.objects.create(
                         id=player2,
                         name=p2name
                     )
+                    player_list.append(player2)
 
                 p1score = melee_set['entrant1Score']
                 p2score = melee_set['entrant2Score']
@@ -191,8 +194,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         played=playedBool,
                         pr_eligible=is_pr_eligible
                     ))
-                    Player.objects.bulk_create(players_to_create, ignore_conflicts=True)
-                    Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
+        Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
         transaction.commit()
         tournament_results_list = TournamentResults.objects.all() or []
         tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
