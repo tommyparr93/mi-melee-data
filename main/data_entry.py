@@ -195,10 +195,11 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         pr_eligible=is_pr_eligible
                     ))
         Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
-        transaction.commit()
+        print("finished sets")
         tournament_results_list = TournamentResults.objects.all() or []
-        tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
-
+        print("got results 1")
+        # tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
+        print("starting tournament results")
         conn = psycopg2.connect(dbname=dbName, user=dbUser, password=dbPassword, host=dbHost, port=dbPort)
         cur = conn.cursor()
 
@@ -208,11 +209,11 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
             player_id = result['playerid']
             placement = result['placement']
 
-            if (event_id, player_id) not in tournament_results_list:
-                sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s)'
-                query_parameters = (event_id, player_id, placement)
-                cur.execute(sql_query, query_parameters)
-                conn.commit()
+            # if (event_id, player_id) not in tournament_results_list:
+            sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s)'
+            query_parameters = (event_id, player_id, placement)
+            cur.execute(sql_query, query_parameters)
+            conn.commit()
 
         conn.close()
 

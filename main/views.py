@@ -1,11 +1,10 @@
 from django.http import HttpResponse
 from django.core.paginator import Paginator
-from django_filters.views import FilterView
-from .filters import PlayerFilter
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
+from django.db.models.functions import Lower
 from django.db.models import Q
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
@@ -33,7 +32,7 @@ def player_detail_calculations(player, sets):
 
 # need to start accounting for DQs in this model
 def get_head_to_head_results(player, sets):
-
+    sets = sets.filter(pr_eligible=True)
     opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
     opponents.remove(player.id)
     opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
@@ -151,17 +150,15 @@ class PlayerListView(generic.ListView):
     model = Player
     template_name = 'main/players.html'
     paginate_by = 25
-    ordering = ['name']
+    ordering = [Lower('name')]
     queryset = Player.objects.all()
 
     def get_queryset(self):
         queryset = super().get_queryset()
+        queryset = queryset.exclude(region_code__isnull=True)
         query = self.request.GET.get('q')
-        region = self.request.GET.get('region')
         if query:
             queryset = queryset.filter(Q(name__icontains=query))
-        if region:
-            queryset = queryset.filter(Q(region_code__exact='7'))
         return queryset
 
 
