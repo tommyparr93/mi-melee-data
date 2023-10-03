@@ -137,6 +137,8 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                 i += 1
                 get_sets = smash.event_show_sets(event_id, i)
 
+            players_to_create = []
+            sets_to_create = []
             for melee_set in sets:
 
                 player1 = melee_set['entrant1Players'][0]['playerId']
@@ -153,12 +155,12 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                 #                 id=player,
                 #                 name=player_info['name']
                 #             )
-                if not exists(Player, player1):
+                if player1 not in player_list:
                     Player.objects.create(
                         id=player1,
                         name=p1name
                     )
-                if not exists(Player, player2):
+                if player2 not in player_list:
                     Player.objects.create(
                         id=player2,
                         name=p2name
@@ -177,10 +179,10 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                 playedBool = (p1score + p2score) >= 0
 
                 if melee_set['id'] not in set_list:
-                    Set.objects.create(
+                    sets_to_create.append(Set(
                         id=melee_set['id'],
-                        player1=Player.objects.get(id=player1),
-                        player2=Player.objects.get(id=player2),
+                        player1_id=player1,
+                        player2_id=player2,
                         player1_score=p1score,
                         player2_score=p2score,
                         winner_id=winner,
@@ -188,7 +190,9 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         location=melee_set['fullRoundText'],
                         played=playedBool,
                         pr_eligible=is_pr_eligible
-                    ).save()
+                    ))
+                    Player.objects.bulk_create(players_to_create)
+                    Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
         transaction.commit()
         tournament_results_list = TournamentResults.objects.all() or []
         tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
