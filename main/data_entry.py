@@ -116,80 +116,80 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
     print(f'Event ID: {event_id}')
 
     if not exists(Tournament, event_id):
+        with transaction.atomic():
+            print(f'tournament {tournament_slug} not in DB, adding tournament {tournament_slug}')
+            print('Getting pr season for tournament')
+            pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
+            Tournament.objects.create(
+                id=event_id,
+                name=t_name,
+                date=t_date,
+                city=t_city,
+                entrant_count=t_entrants,
+                pr_season=None if not pr_season else pr_season
+            ).save()
 
-        print(f'tournament {tournament_slug} not in DB, adding tournament {tournament_slug}')
-        print('Getting pr season for tournament')
-        pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
-        Tournament.objects.create(
-            id=event_id,
-            name=t_name,
-            date=t_date,
-            city=t_city,
-            entrant_count=t_entrants,
-            pr_season=None if not pr_season else pr_season
-        ).save()
+            i = 1
+            get_sets = smash.event_show_sets(event_id, 1)
+            sets = []
+            while len(get_sets) > 0:
+                sets.extend(get_sets)
+                i += 1
+                get_sets = smash.event_show_sets(event_id, i)
 
-        i = 1
-        get_sets = smash.event_show_sets(event_id, 1)
-        sets = []
-        while len(get_sets) > 0:
-            sets.extend(get_sets)
-            i += 1
-            get_sets = smash.event_show_sets(event_id, i)
+            for melee_set in sets:
 
-        for melee_set in sets:
+                player1 = melee_set['entrant1Players'][0]['playerId']
+                player2 = melee_set['entrant2Players'][0]['playerId']
+                p1name = (melee_set['entrant1Players'])[0]['playerTag']
+                p2name = (melee_set['entrant2Players'])[0]['playerTag']
+                # for player in player1, player2:
+                #     if not exists(Player, player):
+                #
+                #             print("HERE HERE HERE ", player)
+                #             player_info = smash.player_show_info(player)
+                #             # TODO assign region info here as well
+                #             Player.objects.create(
+                #                 id=player,
+                #                 name=player_info['name']
+                #             )
+                if not exists(Player, player1):
+                    Player.objects.create(
+                        id=player1,
+                        name=p1name
+                    )
+                if not exists(Player, player2):
+                    Player.objects.create(
+                        id=player2,
+                        name=p2name
+                    )
 
-            player1 = melee_set['entrant1Players'][0]['playerId']
-            player2 = melee_set['entrant2Players'][0]['playerId']
-            p1name = (melee_set['entrant1Players'])[0]['playerTag']
-            p2name = (melee_set['entrant2Players'])[0]['playerTag']
-            # for player in player1, player2:
-            #     if not exists(Player, player):
-            #
-            #             print("HERE HERE HERE ", player)
-            #             player_info = smash.player_show_info(player)
-            #             # TODO assign region info here as well
-            #             Player.objects.create(
-            #                 id=player,
-            #                 name=player_info['name']
-            #             )
-            if not exists(Player, player1):
-                Player.objects.create(
-                    id=player1,
-                    name=p1name
-                )
-            if not exists(Player, player2):
-                Player.objects.create(
-                    id=player2,
-                    name=p2name
-                )
+                p1score = melee_set['entrant1Score']
+                p2score = melee_set['entrant2Score']
 
-            p1score = melee_set['entrant1Score']
-            p2score = melee_set['entrant2Score']
+                if p1score > p2score:
+                    winner = player1
+                    bestOf = 3 if p1score == 2 else 5 if p1score == 3 else None
+                else:
+                    winner = player2
+                    bestOf = 3 if p2score == 2 else 5 if p2score == 3 else None
 
-            if p1score > p2score:
-                winner = player1
-                bestOf = 3 if p1score == 2 else 5 if p1score == 3 else None
-            else:
-                winner = player2
-                bestOf = 3 if p2score == 2 else 5 if p2score == 3 else None
+                playedBool = (p1score + p2score) >= 0
 
-            playedBool = (p1score + p2score) >= 0
-
-            if melee_set['id'] not in set_list:
-                Set.objects.create(
-                    id=melee_set['id'],
-                    player1=Player.objects.get(id=player1),
-                    player2=Player.objects.get(id=player2),
-                    player1_score=p1score,
-                    player2_score=p2score,
-                    winner_id=winner,
-                    tournament_id=event_id,
-                    location=melee_set['fullRoundText'],
-                    played=playedBool,
-                    pr_eligible=is_pr_eligible
-                ).save()
-
+                if melee_set['id'] not in set_list:
+                    Set.objects.create(
+                        id=melee_set['id'],
+                        player1=Player.objects.get(id=player1),
+                        player2=Player.objects.get(id=player2),
+                        player1_score=p1score,
+                        player2_score=p2score,
+                        winner_id=winner,
+                        tournament_id=event_id,
+                        location=melee_set['fullRoundText'],
+                        played=playedBool,
+                        pr_eligible=is_pr_eligible
+                    ).save()
+        transaction.commit()
         tournament_results_list = TournamentResults.objects.all() or []
         tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
 
