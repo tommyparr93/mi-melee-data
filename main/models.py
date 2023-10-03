@@ -150,7 +150,7 @@ class Set(models.Model):
     player1_score = models.IntegerField(blank=True, null=True)
     player2_score = models.IntegerField(blank=True, null=True)
     winner_id = models.IntegerField(blank=True, null=True)
-    tournament = models.ForeignKey('Tournament', models.DO_NOTHING, blank=True, null=True)
+    tournament = models.ForeignKey('Tournament', blank=True, null=True, on_delete=models.CASCADE)
     location = models.CharField(blank=True, null=True)
     played = models.BooleanField(blank=True, null=True)
     pr_eligible = models.BooleanField(default=True, null=False)
@@ -208,7 +208,7 @@ class Tournament(models.Model):
 # This is because I built the database with composite keys originally,
 # don't touch lmao
 class TournamentResults(models.Model):
-    tournament = models.OneToOneField(Tournament, models.DO_NOTHING, primary_key=True)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
+    tournament = models.OneToOneField(Tournament, primary_key=True, on_delete=models.CASCADE)  # The composite primary key (tour_id, playerid) found, that is not supported. The first column is selected.
     player_id = models.ForeignKey(Player, models.DO_NOTHING, db_column='player_id')
     name = models.CharField(blank=True, null=True)
     placement = models.IntegerField(blank=True, null=True)

@@ -16,6 +16,7 @@ from django.http import HttpResponseRedirect
 from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.shortcuts import reverse, redirect
 import pysmashgg
+from django.db import transaction
 
 
 def extract_url_values(url):
@@ -115,6 +116,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
     print(f'Event ID: {event_id}')
 
     if not exists(Tournament, event_id):
+
         print(f'tournament {tournament_slug} not in DB, adding tournament {tournament_slug}')
         print('Getting pr season for tournament')
         pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
@@ -139,15 +141,28 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
 
             player1 = melee_set['entrant1Players'][0]['playerId']
             player2 = melee_set['entrant2Players'][0]['playerId']
-
-            for player in player1, player2:
-                if not exists(Player, player):
-                    player_info = smash.player_show_info(player)
-                    # TODO assign region info here as well
-                    Player.objects.create(
-                        id=player,
-                        name=player_info['name']
-                    )
+            p1name = (melee_set['entrant1Players'])[0]['playerTag']
+            p2name = (melee_set['entrant2Players'])[0]['playerTag']
+            # for player in player1, player2:
+            #     if not exists(Player, player):
+            #
+            #             print("HERE HERE HERE ", player)
+            #             player_info = smash.player_show_info(player)
+            #             # TODO assign region info here as well
+            #             Player.objects.create(
+            #                 id=player,
+            #                 name=player_info['name']
+            #             )
+            if not exists(Player, player1):
+                Player.objects.create(
+                    id=player1,
+                    name=p1name
+                )
+            if not exists(Player, player2):
+                Player.objects.create(
+                    id=player2,
+                    name=p2name
+                )
 
             p1score = melee_set['entrant1Score']
             p2score = melee_set['entrant2Score']

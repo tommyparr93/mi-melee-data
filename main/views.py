@@ -73,7 +73,10 @@ def put_tournament(request):
             tournament_url = cleaned_data['tournament_url']
             is_pr_eligible = cleaned_data['is_pr_eligible']
             print(tournament_url)
+
             return enter_tournament(tournament_url, is_pr_eligible)
+
+
     else:
         context = {'form': TournamentForm()}
         return render(request, 'main/tournament_form.html', context)
