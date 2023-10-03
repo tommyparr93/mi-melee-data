@@ -126,7 +126,7 @@ class Player(models.Model):
     main_account = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):
-        return self.name
+        return self.name if self.name is not None else "Unknown Player"
 
     class Meta:
         db_table = 'player'
@@ -138,7 +138,6 @@ class Region(models.Model):
 
     def __str__(self):
         return self.name
-
     class Meta:
         db_table = 'region'
 

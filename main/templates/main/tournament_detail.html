@@ -2,6 +2,7 @@
 {% block title %}Tournament Details{% endblock %}
 {% block content %}
   <h1>{{ tournament.name }}</h1>
+  <a href="{% url 'admin:main_tournament_change' tournament.id %}" class="btn btn-primary" style="float: right;">Edit</a>
   <p><strong>Date: </strong>{{ tournament.date }}</p>
   <p><strong>Entrants: </strong>{{ tournament.entrant_count }}</p>
   <p><strong>PR Season: </strong>{{ tournament.pr_season.name }}</p>
