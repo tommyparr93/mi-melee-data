@@ -191,7 +191,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         played=playedBool,
                         pr_eligible=is_pr_eligible
                     ))
-                    Player.objects.bulk_create(players_to_create)
+                    Player.objects.bulk_create(players_to_create, ignore_conflicts=True)
                     Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
         transaction.commit()
         tournament_results_list = TournamentResults.objects.all() or []
