@@ -50,7 +50,7 @@
       {% for opponent in opponents %}
       <tr>
         <td>
-          <a href="{% url 'player_detail' opponent.opponent.id %}">
+          <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
             {% if pr_view and opponent.opponent.pr_notable %}
               <strong>{{ opponent.opponent.name }}</strong>
             {% else %}
