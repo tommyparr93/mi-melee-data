@@ -20,7 +20,7 @@
       {% for player in page_obj %}
         <tr>
         <td>
-            <a href="{% url 'player_detail' pk=player.pk %}{% if pr_season %}?pr_view=on?pr_season={{ pr_season }}{% endif %}">
+            <a href="{% url 'player_detail' pk=player.pk %}{% if pr_season %}?pr_view=on?&pr_season={{ pr_season }}{% endif %}">
                 {{ player.name }}
             </a>
         </td>
