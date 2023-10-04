@@ -66,7 +66,8 @@ def get_head_to_head_results(player, sets):
             'wins': wins,
             'losses': losses,
             'win_rate': int(wr),
-            'count': wins + losses
+            'count': wins + losses,
+            'pr_notable': opponent.pr_notable
         }
         opponent_records.append(opponent_record)
 
@@ -311,10 +312,26 @@ class PlayerDetailView(DetailView):
         paginator = Paginator(sets, 25)
         context['sets'] = paginator.get_page(page_number)
 
+        pr_view = self.request.GET.get('pr_view')
+        print("a1")
+        # Logic to filter and sort player list
+        if pr_view:
+            print("in pr view")
+            h2h_list = get_head_to_head_results(player, sets)
+            print(h2h_list)
+            # Assuming you have a 'pr_notable' field in your Player model
+            h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], -x['count']),)
+            h2h_list = [opponent for opponent in h2h_list if opponent['pr_notable'] or opponent['losses'] > 0]
+            context['pr_view'] = True
+        else:
+            context['pr_view'] = False
+            h2h_list = get_head_to_head_results(player, sets)
+            for item in h2h_list:
+                print(type(item['opponent']), type(item))
 
 
         # H2H Queries
-        context['h2h'] = get_head_to_head_results(player, sets)
+        context['h2h'] = h2h_list
 
         # H2H Pagination
         page_number = self.request.GET.get('page')
@@ -324,6 +341,8 @@ class PlayerDetailView(DetailView):
 
         # player detail calculations
         context['calculations'] = player_detail_calculations(player, sets)
+
+
 
         return context
 

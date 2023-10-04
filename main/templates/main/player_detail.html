@@ -14,6 +14,12 @@
         </select>
         <input type="submit" value="Filter">
     </form>
+        <form method="get" style="float: right">
+    <!-- Other form elements -->
+    <input type="checkbox" name="pr_view" id="pr_view" {% if request.GET.pr_view %}checked{% endif %}>
+    <label for="pr_view">PR View</label>
+    </form>
+
         <h1>{{ player.name }}</h1>
         <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
     </div>
@@ -46,7 +52,15 @@
       <tbody>
       {% for opponent in opponents %}
       <tr>
-          <td><a href="{% url 'player_detail' opponent.opponent.id %}"> {{opponent.opponent.name }} </a> </td>
+        <td>
+          <a href="{% url 'player_detail' opponent.opponent.id %}">
+            {% if pr_view and opponent.opponent.pr_notable %}
+              <strong>{{ opponent.opponent.name }}</strong>
+            {% else %}
+              {{ opponent.opponent.name }}
+            {% endif %}
+          </a>
+        </td>
         <td> {{opponent.wins }} </td>
         <td> {{opponent.losses }} </td>
         <td> {{opponent.win_rate }}% </td>
@@ -123,6 +137,12 @@
         {% endif %}
       </span>
     </div>
+
+<script type="text/javascript">
+    document.getElementById('pr_view').addEventListener('change', function() {
+        this.form.submit();
+    });
+</script>
 
 
 {% endblock %}
