@@ -20,13 +20,24 @@ def player_detail_calculations(player, sets):
     losses = sets.exclude(winner_id=player.id).count()
     wr = (wins / sets.count()) * 100
     num_tournaments = sets.values('tournament_id').distinct().count()
-    stats = {
-        'wins': wins,
-        'losses': losses,
-        'win_rate': int(wr),
-        'set_count': wins + losses,
-        'tournament_count': num_tournaments
-    }
+    pr_rank = PRSeasonResult.objects.filter(Q(player_id=player.id) & Q(pr_season_id=1)).first()
+    if pr_rank:
+        stats = {
+            'wins': wins,
+            'losses': losses,
+            'win_rate': int(wr),
+            'set_count': wins + losses,
+            'tournament_count': num_tournaments,
+            'pr_rank': pr_rank
+        }
+    else:
+        stats = {
+            'wins': wins,
+            'losses': losses,
+            'win_rate': int(wr),
+            'set_count': wins + losses,
+            'tournament_count': num_tournaments,
+        }
     return stats
 
 
@@ -184,6 +195,7 @@ class PlayerDetailView(DetailView):
         pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct()
         context['pr_seasons'] = pr_seasons
         pr_season_id = self.request.GET.get('pr_season')
+
 
         if pr_season_id:
             sets = Set.objects.filter(

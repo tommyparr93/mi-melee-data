@@ -22,6 +22,11 @@
     {% endif %}
 
     <p><strong>Region: </strong>{{ player.region_code }}</p>
+    {% if calculations.pr_rank.rank %}
+
+
+    <p><strong>Current MI PR Rank: {{ calculations.pr_rank.rank }}</strong></p>
+    {% endif %}
     <p>Number of tournaments entered: {{ calculations.tournament_count }}</p>
     <p>Number of sets played: {{ calculations.set_count }} </p>
     <p>Number of sets won: {{ calculations.wins }}</p>
@@ -112,10 +117,10 @@
               Page {{ sets.number }} of {{ sets.paginator.num_pages }}.
           </span>
 
-          {% if sets.has_next %}
-              <a href="?page={{ sets.next_page_number }}">next</a>
-              <a href="?page={{ sets.paginator.num_pages }}">last &raquo;</a>
-          {% endif %}
+        {% if sets.has_next %}
+            <a href="?page={{ sets.next_page_number }}&pr_season={{ pr_season }}">next</a>
+            <a href="?page={{ sets.paginator.num_pages }}&pr_season={{ pr_season }}">last »</a>
+        {% endif %}
       </span>
     </div>
 
