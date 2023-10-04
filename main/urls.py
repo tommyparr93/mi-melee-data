@@ -14,4 +14,6 @@ urlpatterns = [
     path('pr_season_form', views.create_pr_season1, name='pr_season_form'),
     path('pr_season/<int:pk>', views.PrSeasonDetailView.as_view(), name='pr_season_details'),
     path('pr_results_form', views.create_pr_season, name='pr_results_form'),
+    path('join_duplicate', views.join_duplicate, name='join_duplicate'),
+
 ]

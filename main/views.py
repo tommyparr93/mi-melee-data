@@ -1,7 +1,8 @@
+from django.db import transaction
 from django.http import HttpResponse
 from django.core.paginator import Paginator
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
-from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet
+from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet, DuplicatePlayer, ConfirmMergeForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
 from django.db.models.functions import Lower
@@ -92,6 +93,99 @@ def put_tournament(request):
         return render(request, 'main/tournament_form.html', context)
 
 
+def join_duplicate(request):
+    player_details = None
+    merge_success = False
+    if request.method == 'POST':
+        form = DuplicatePlayer(request.POST)
+        cleaned_data = form
+        print("A1")
+        if 'check_duplicate' in request.POST:
+            print("B1")
+            if form.is_valid():
+                cleaned_data = form.cleaned_data
+                main_account = cleaned_data['player1']
+                duplicate_account = cleaned_data['player2']
+                request.session['main_account'] = form.cleaned_data['player1']
+                request.session['duplicate_account'] = form.cleaned_data['player2']
+                player_details = get_player_details(main_account, duplicate_account)
+
+        elif 'confirm_merge' in request.POST:
+            print("C1")
+            confirm_form = ConfirmMergeForm(request.POST)
+            if confirm_form.is_valid() and confirm_form.cleaned_data['confirm_merge']:
+                # Assuming you have a function to merge accounts
+                main_account = request.session.get('main_account')
+                duplicate_account = request.session.get('duplicate_account')
+                merge_accounts(main_account, duplicate_account)
+
+                merge_success = True
+
+    else:
+        form = DuplicatePlayer()
+
+    context = {
+        'form': form,
+        'player_details': player_details,
+        'confirm_merge_form': ConfirmMergeForm(),  # Pass the confirmation form to the context
+        'merge_success': merge_success,
+    }
+    return render(request, 'main/join_duplicate.html', context)
+
+
+def merge_accounts(main_account, duplicate_account):
+    with transaction.atomic():
+        # Update sets where player1 is player_id_old
+        print("UPDATING SETS")
+        print(f"Main Account: {main_account}")
+        print(f"Duplicate Account: {duplicate_account}")
+        Set.objects.filter(player1_id=duplicate_account).update(player1_id=main_account)
+
+        # Update sets where player2 is player_id_old
+        Set.objects.filter(player2_id=duplicate_account).update(player2_id=main_account)
+
+        # Update tournament results
+        TournamentResults.objects.filter(player_id=duplicate_account).update(player_id=main_account)
+
+        # Delete the old player record
+        Player.objects.filter(id=duplicate_account).delete()
+
+        return print("COMPLETED")
+
+def get_player_details(main_account, duplicate_account):
+    try:
+        # Fetch details of main_account
+        main_account_details = Player.objects.get(id=main_account)
+        main_account_sets = Set.objects.filter(Q(player1=main_account) | Q(player2=main_account))
+
+        # Fetch details of duplicate_account
+        duplicate_account_details = Player.objects.get(id=duplicate_account)
+        duplicate_account_sets = Set.objects.filter(Q(player1=duplicate_account) | Q(player2=duplicate_account))
+
+        # Compile details into a dictionary (or you could use a custom class)
+        details = {
+            'main_account': {
+                'id': main_account_details.id,
+                'name': main_account_details.name,
+                'info': player_detail_calculations(main_account_details, main_account_sets)
+            },
+            'duplicate_account': {
+                'id': duplicate_account_details.id,
+                'name': duplicate_account_details.name,
+                'info': player_detail_calculations(duplicate_account_details, duplicate_account_sets)
+            }
+        }
+
+        return details
+
+    except Player.DoesNotExist:
+        # Handle case where player does not exist
+        print(f"Player with id {main_account} or {duplicate_account} not found!")
+        return None
+
+
+
+
 def process_pr_csv(request):
     if request.method == 'POST':
         form = PRForm(request.POST, request.FILES)
@@ -169,7 +263,9 @@ class PlayerListView(generic.ListView):
         queryset = queryset.exclude(region_code__isnull=True)
         query = self.request.GET.get('q')
         if query:
+            queryset = super().get_queryset()
             queryset = queryset.filter(Q(name__icontains=query))
+
         return queryset
 
 

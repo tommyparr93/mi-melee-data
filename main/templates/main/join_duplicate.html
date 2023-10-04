@@ -1,0 +1,34 @@
+{% extends 'base.html' %}
+{% block title %}Duplicate Player Tool{% endblock %}
+{% block content %}
+{% if user.is_superuser %}
+
+<h1>Join Duplicate</h1>
+<h3>This page is to merge duplicate / alt accounts into the main account, add the main account id and duplicate account id and then press view account info. After viewing you will confirm and complete the merge with another button press below.</h3>
+<form method="POST" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" name="check_duplicate" value="View account info">
+</form>
+{% endif %}
+
+{% if player_details %}
+<div>
+    <h2>Player Details:</h2>
+    <!-- Render the player details here. The following is just an example, you need to adjust it based on the actual structure of player_details -->
+    <p><h3>Main Account:</h3> {{ player_details.main_account }}</p>
+    <p><h3>Duplicate Account:</h3> {{ player_details.duplicate_account }}</p>
+    <h2><strong>WARNING: PLEASE CONFIRM THE ACCOUNTS ARE CORRECT BEFORE UPDATING</strong></h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ confirm_merge_form.as_p }}
+        <input type="submit" name="confirm_merge" value="Confirm Merge">
+    </form>
+</div>
+
+
+
+
+{% endif %}
+
+{% endblock %}

@@ -6,7 +6,16 @@ from .widgets import BootStrapDateTimePickerInput
 
 class TournamentForm(forms.Form):
     tournament_url = forms.CharField(required=True)
-    is_pr_eligible = forms.BooleanField(required=False, initial=False)
+    is_pr_eligible = forms.BooleanField(required=False, initial=True)
+
+
+class DuplicatePlayer(forms.Form):
+    player1 = forms.CharField(required=True, label='Main Player ID')
+    player2 = forms.CharField(required=True, label='Duplicate Player ID')
+
+
+class ConfirmMergeForm(forms.Form):
+    confirm_merge = forms.BooleanField(required=True, initial=False, help_text="Check to confirm merging accounts.")
 
 
 class PRSeasonForm1(forms.Form):
