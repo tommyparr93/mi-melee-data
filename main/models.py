@@ -124,6 +124,7 @@ class Player(models.Model):
     character_main = models.CharField(blank=True, null=True)
     character_alt = models.CharField(blank=True, null=True)
     pr_notable = models.BooleanField(blank=True, null=True, default=False)
+    pr_eligible = models.BooleanField(blank=True, null=True, default=False)
     main_account = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
 
     def __str__(self):

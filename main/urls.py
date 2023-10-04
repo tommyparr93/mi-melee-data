@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .views import PrEligiblePlayerListView
 
 urlpatterns = [
     path('', views.PlayerListView.as_view(), name='home'),
@@ -15,5 +16,6 @@ urlpatterns = [
     path('pr_season/<int:pk>', views.PrSeasonDetailView.as_view(), name='pr_season_details'),
     path('pr_results_form', views.create_pr_season, name='pr_results_form'),
     path('join_duplicate', views.join_duplicate, name='join_duplicate'),
+    path('pr-eligible-players/', PrEligiblePlayerListView.as_view(), name='pr_eligible_players'),
 
 ]

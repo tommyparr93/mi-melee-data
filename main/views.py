@@ -353,3 +353,16 @@ class TournamentDetailView(DetailView):
         results = TournamentResults.objects.filter(tournament_id=tournament).order_by('placement')
         context['results'] = results
         return context
+
+
+class PrEligiblePlayerListView(PlayerListView):
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        # Filter to include only Players where pr_eligible is True
+        return queryset.filter(pr_eligible=True)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['pr_season'] = 2  # or whatever value you want to set
+        return context

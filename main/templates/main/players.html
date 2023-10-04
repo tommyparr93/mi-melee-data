@@ -19,9 +19,13 @@
     <tbody>
       {% for player in page_obj %}
         <tr>
-          <td><a href="{% url 'player_detail' pk=player.pk %}">{{ player.name }}</a></td>
-          <td>{{ player.character_main }}</td>
-          <td>{{ player.region_code }}</td>
+        <td>
+            <a href="{% url 'player_detail' pk=player.pk %}{% if pr_season %}?pr_season={{ pr_season }}{% endif %}">
+                {{ player.name }}
+            </a>
+        </td>
+        <td>{{ player.character_main }}</td>
+        <td>{{ player.region_code }}</td>
         </tr>
       {% endfor %}
     </tbody>
