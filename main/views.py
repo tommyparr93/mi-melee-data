@@ -313,10 +313,8 @@ class PlayerDetailView(DetailView):
         context['sets'] = paginator.get_page(page_number)
 
         pr_view = self.request.GET.get('pr_view')
-        print("a1")
         # Logic to filter and sort player list
         if pr_view:
-            print("in pr view")
             h2h_list = get_head_to_head_results(player, sets)
             print(h2h_list)
             # Assuming you have a 'pr_notable' field in your Player model
@@ -326,17 +324,16 @@ class PlayerDetailView(DetailView):
         else:
             context['pr_view'] = False
             h2h_list = get_head_to_head_results(player, sets)
-            for item in h2h_list:
-                print(type(item['opponent']), type(item))
 
 
         # H2H Queries
         context['h2h'] = h2h_list
 
         # H2H Pagination
-        page_number = self.request.GET.get('page')
-        paginator = Paginator(context['h2h'], 25)  # Show 10 opponents per page
-        opponents = paginator.get_page(page_number)
+
+        opponents_page_number = self.request.GET.get('opponents_page')
+        opponents_paginator = Paginator(context['h2h'], 25)
+        opponents = opponents_paginator.get_page(opponents_page_number)
         context['opponents'] = opponents
 
         # player detail calculations
