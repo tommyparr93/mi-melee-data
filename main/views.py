@@ -50,7 +50,6 @@ def get_head_to_head_results(player, sets):
     opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
 
     opponent_records = []
-
     for opponent in opponents_queryset:
         matches = sets.filter(Q(player1=opponent) | Q(player2=opponent))
         wins = 0
@@ -100,9 +99,7 @@ def join_duplicate(request):
     if request.method == 'POST':
         form = DuplicatePlayer(request.POST)
         cleaned_data = form
-        print("A1")
         if 'check_duplicate' in request.POST:
-            print("B1")
             if form.is_valid():
                 cleaned_data = form.cleaned_data
                 main_account = cleaned_data['player1']
@@ -112,7 +109,6 @@ def join_duplicate(request):
                 player_details = get_player_details(main_account, duplicate_account)
 
         elif 'confirm_merge' in request.POST:
-            print("C1")
             confirm_form = ConfirmMergeForm(request.POST)
             if confirm_form.is_valid() and confirm_form.cleaned_data['confirm_merge']:
                 # Assuming you have a function to merge accounts
@@ -316,10 +312,11 @@ class PlayerDetailView(DetailView):
         # Logic to filter and sort player list
         if pr_view:
             h2h_list = get_head_to_head_results(player, sets)
-            print(h2h_list)
             # Assuming you have a 'pr_notable' field in your Player model
-            h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], -x['count']),)
+            h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], (x['opponent'].name or '').lower()),)
+            not_priority = [opponent for opponent in h2h_list if not opponent['pr_notable'] and not opponent['losses'] > 0]
             h2h_list = [opponent for opponent in h2h_list if opponent['pr_notable'] or opponent['losses'] > 0]
+            h2h_list.extend(not_priority)
             context['pr_view'] = True
         else:
             context['pr_view'] = False
