@@ -87,6 +87,45 @@
 </div>
 
 
+<h2>Tournaments</h2>
+<table class="table table-light">
+    <thead>
+      <tr>
+        <th>Tournament Name</th>
+        <th>Date</th>
+        <!-- Add other relevant columns -->
+      </tr>
+    </thead>
+    <tbody>
+      {% for tournament in tournaments %}
+        <tr>
+          <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td><td></td>
+          <td>{{ tournament.date }}</td>
+          <!-- Add other relevant data -->
+        </tr>
+      {% empty %}
+        <tr>
+          <td colspan="2">No tournaments found</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+</table>
+<div class="pagination">
+    <span class="step-links">
+        {% if tournaments.has_previous %}
+            <a href="?tournaments_page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">« first</a>
+            <a href="?tournaments_page={{ tournaments.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">previous</a>
+        {% endif %}
+
+        <span class="current-page">
+            Page {{ tournaments.number }} of {{ tournaments.paginator.num_pages }}.
+        </span>
+        {% if tournaments.has_next %}
+            <a href="?tournaments_page={{ tournaments.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">next</a>
+            <a href="?tournaments_page={{ tournaments.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">last »</a>
+        {% endif %}
+    </span>
+</div>
 
 
     <h2>Sets</h2>

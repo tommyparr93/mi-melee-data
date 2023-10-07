@@ -149,6 +149,7 @@ def merge_accounts(main_account, duplicate_account):
 
         return print("COMPLETED")
 
+
 def get_player_details(main_account, duplicate_account):
     try:
         # Fetch details of main_account
@@ -179,8 +180,6 @@ def get_player_details(main_account, duplicate_account):
         # Handle case where player does not exist
         print(f"Player with id {main_account} or {duplicate_account} not found!")
         return None
-
-
 
 
 def process_pr_csv(request):
@@ -285,6 +284,8 @@ class PlayerDetailView(DetailView):
         player = self.get_object()
         sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
 
+
+        # PR Season Filter
         pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct()
         context['pr_seasons'] = pr_seasons
         pr_season_id = self.request.GET.get('pr_season')
@@ -307,6 +308,7 @@ class PlayerDetailView(DetailView):
         page_number = self.request.GET.get('page')
         paginator = Paginator(sets, 25)
         context['sets'] = paginator.get_page(page_number)
+
 
         pr_view = self.request.GET.get('pr_view')
         # Logic to filter and sort player list
@@ -336,6 +338,19 @@ class PlayerDetailView(DetailView):
         # player detail calculations
         context['calculations'] = player_detail_calculations(player, sets)
 
+        tournaments = Tournament.objects.filter(set__in=sets).distinct()
+        if pr_season_id:
+            tournaments = Tournament.objects.filter(set__in=sets, pr_season_id=pr_season_id).distinct().order_by(
+                '-date')
+        else:
+            tournaments = Tournament.objects.filter(set__in=sets).distinct().order_by('-date')
+
+        # Optional: Tournament Pagination
+
+        tournaments_page_number = self.request.GET.get('tournaments_page')
+        tournaments_paginator = Paginator(tournaments, 25)  # Adjust the number per page as necessary
+        paged_tournaments = tournaments_paginator.get_page(tournaments_page_number)
+        context['tournaments'] = paged_tournaments
 
 
         return context
