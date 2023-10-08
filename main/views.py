@@ -306,7 +306,7 @@ class PlayerDetailView(DetailView):
 
         # Sets Pagination
         page_number = self.request.GET.get('page')
-        paginator = Paginator(sets, 25)
+        paginator = Paginator(sets, 20)
         context['sets'] = paginator.get_page(page_number)
 
 
@@ -331,7 +331,7 @@ class PlayerDetailView(DetailView):
         # H2H Pagination
 
         opponents_page_number = self.request.GET.get('opponents_page')
-        opponents_paginator = Paginator(context['h2h'], 25)
+        opponents_paginator = Paginator(context['h2h'], 20)
         opponents = opponents_paginator.get_page(opponents_page_number)
         context['opponents'] = opponents
 
@@ -348,7 +348,7 @@ class PlayerDetailView(DetailView):
         # Optional: Tournament Pagination
 
         tournaments_page_number = self.request.GET.get('tournaments_page')
-        tournaments_paginator = Paginator(tournaments, 25)  # Adjust the number per page as necessary
+        tournaments_paginator = Paginator(tournaments, 20)  # Adjust the number per page as necessary
         paged_tournaments = tournaments_paginator.get_page(tournaments_page_number)
         context['tournaments'] = paged_tournaments
 
