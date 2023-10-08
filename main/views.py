@@ -9,6 +9,7 @@ from django.db.models.functions import Lower
 from django.db.models import Q
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
+from collections import namedtuple
 
 
 def players(request):
@@ -325,6 +326,39 @@ class PlayerDetailView(DetailView):
             h2h_list = get_head_to_head_results(player, sets)
 
 
+        # I'm really confused whats actually happening, it might just be because I'm tired but like the variable names don't match and i'm so confused
+        SetDisplay = namedtuple('SetDisplay',
+                                ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
+                                 'tournament_date', 'id'])
+
+        for opponent_data in h2h_list:
+            opponent = opponent_data['opponent']
+            opponent_sets = Set.objects.filter(
+                (Q(player1=player) & Q(player2=opponent)) |
+                (Q(player2=player) & Q(player1=opponent))
+            )
+            if pr_season_id:
+                opponent_sets = opponent_sets.filter(tournament__pr_season_id=pr_season_id)
+            set_display_list = []
+            for set in opponent_sets:
+                # Determine the ordering of players and their corresponding scores
+                if set.player1 == player:
+                    p1_name = set.player1.name
+                    p2_name = set.player2.name
+                    p1_score = set.player1_score
+                    p2_score = set.player2_score
+                else:
+                    p1_name = set.player2.name
+                    p2_name = set.player1.name
+                    p1_score = set.player2_score
+                    p2_score = set.player1_score
+
+                # Create a SetDisplay object with the appropriate data and append it to the list
+                set_display = SetDisplay(p1_name, p2_name, p1_score, p2_score, set.tournament.name, set.tournament.date, set.id)
+                set_display_list.append(set_display)
+
+            # Assign the list of SetDisplay objects to opponent_data['sets']
+            opponent_data['sets'] = set_display_list
         # H2H Queries
         context['h2h'] = h2h_list
 

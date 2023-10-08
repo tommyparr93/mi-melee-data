@@ -7,9 +7,20 @@
   grid-template-columns: repeat(2, 1fr);
   gap: 3px; /* Adjust the gap as needed */
 }
+.zeroPadding {
+  padding: 0 !important;
+}
+.table-success {
+  background-color: #d4edda; /* or any light green color of your choice */
+}
+
+.table-danger {
+  background-color: #f8d7da; /* or any light red color of your choice */
+}
 
 </style>
-
+    <div class="stat-container">
+        <h1>{{ player.name }}</h1>
     <div class="float-right">
         <form method="get" style="float: right">
         <select name="pr_season" id="pr_season">
@@ -21,8 +32,9 @@
         {% endfor %}
         </select>
     </form>
-        <h1>{{ player.name }}</h1>
+
         <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
+        </div>
         </div>
     {% if player.main_account %}
         <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
@@ -50,7 +62,7 @@
         </form>
       <table class="table table-light">
         <thead>
-          <tr>
+          <tr><th>button</th>
             <th>Opponent</th>
             <th>Wins</th>
             <th>Losses</th>
@@ -59,7 +71,11 @@
         </thead>
       <tbody>
       {% for opponent in opponents %}
+
       <tr>
+            <td>
+        <button data-toggle="collapse" data-target="#collapse-{{ opponent.opponent.id }}" aria-expanded="false" aria-controls="collapse-{{ opponent.opponent.id }}">+</button>
+          </td>
         <td>
           <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
             {% if pr_view and opponent.opponent.pr_notable %}
@@ -68,11 +84,50 @@
               {{ opponent.opponent.name }}
             {% endif %}
           </a>
+
+
         </td>
         <td> {{opponent.wins }} </td>
         <td> {{opponent.losses }} </td>
         <td> {{opponent.win_rate }}% </td>
       </tr>
+    <tr class="zeroPadding" id="h2h-expanded">
+      <td class="zeroPadding" colspan="5">
+        <div id="collapse-{{ opponent.opponent.id }}" class="collapse" style="margin: 0;">
+{% if opponent.sets %}
+        <table class="table table-light">
+          <thead>
+            <tr>
+              <th>Player 1</th>
+              <th>Player 2</th>
+              <th>Player 1 Score</th>
+              <th>Player 2 Score</th>
+              <th>Tournament</th>
+              <th>Date</th>
+                <th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for set in opponent.sets %}
+            <tr class="{% if set.player1_score > set.player2_score %}table-success{% elif set.player1_score < set.player2_score %}table-danger{% endif %}">
+                <td>{{ set.player1_name }}</td>
+                <td>{{ set.player2_name }}</td>
+                <td>{{ set.player1_score }}</td>
+                <td>{{ set.player2_score }}</td>
+                <td>{{ set.tournament_name }}</td>
+                <td>{{ set.tournament_date }}</td>
+                <td> <a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a>  </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No sets found</p>
+      {% endif %}
+
+        </div>
+      </td>
+    </tr>
       {% empty %}
         <tr>
           <td colspan="3">No tournaments found</td>
@@ -220,6 +275,15 @@ function showTable(tableId) {
 document.addEventListener('DOMContentLoaded', (event) => {
    const activeTable = sessionStorage.getItem('activeTable') || 'h2hTable';
    showTable(activeTable);
+});
+
+
+$('.collapse').on('show.bs.collapse', function() {
+  $(this).parent().removeClass("zeroPadding");
+});
+
+$('.collapse').on('hide.bs.collapse', function() {
+  $(this).parent().addClass("zeroPadding");
 });
 </script>
 
