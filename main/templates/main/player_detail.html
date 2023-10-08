@@ -51,9 +51,6 @@
     </div>
 <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('h2hTable')" style="width: 33%;">Head to Head</a>
 <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('tournamentsTable')" style="width: 33%;">Tournaments</a>
-<a href="#" class="btn btn-primary btn-lg active" onclick="showTable('setsTable')" style="width: 33%;" >Sets</a>
-
-
 <div id="h2hTable" class="table-container">
     <h2>H2H</h2>
     <form method="get">
@@ -63,7 +60,7 @@
       <table class="table table-light">
         <thead>
           <tr>
-              <th>See Details</th>
+              <th style="white-space: nowrap; width: 1%;">See Details</th>
             <th>Opponent</th>
             <th>Wins</th>
             <th>Losses</th>
@@ -95,14 +92,13 @@
     <tr class="zeroPadding" id="h2h-expanded">
       <td class="zeroPadding" colspan="5">
         <div id="collapse-{{ opponent.opponent.id }}" class="collapse" style="margin: 0;">
-{% if opponent.sets %}
+        {% if opponent.sets %}
         <table class="table table-light">
           <thead>
             <tr>
-              <th>Player 1</th>
-              <th>Player 2</th>
-              <th>Player 1 Score</th>
-              <th>Player 2 Score</th>
+              <th>Player</th>
+              <th>Opponent</th>
+              <th>Results</th>
               <th>Tournament</th>
               <th>Date</th>
                 <th>Admin</th>
@@ -113,8 +109,7 @@
             <tr class="{% if set.player1_score > set.player2_score %}table-success{% elif set.player1_score < set.player2_score %}table-danger{% endif %}">
                 <td>{{ set.player1_name }}</td>
                 <td>{{ set.player2_name }}</td>
-                <td>{{ set.player1_score }}</td>
-                <td>{{ set.player2_score }}</td>
+                <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
                 <td>{{ set.tournament_name }}</td>
                 <td>{{ set.tournament_date }}</td>
                 <td> <a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a>  </td>
@@ -161,23 +156,52 @@
     <table class="table table-light">
         <thead>
           <tr>
+              <th style="white-space: nowrap; width: 1%;">See Details</th>
             <th>Tournament Name</th>
             <th>Date</th>
             <!-- Add other relevant columns -->
           </tr>
         </thead>
         <tbody>
-          {% for tournament in tournaments %}
-            <tr>
-              <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
-              <td>{{ tournament.date }}</td>
-              <!-- Add other relevant data -->
-            </tr>
-          {% empty %}
-            <tr>
-              <td colspan="2">No tournaments found</td>
-            </tr>
-          {% endfor %}
+{% for tournament in tournaments %}
+  <tr>
+    <td>
+      <button data-toggle="collapse" data-target="#collapse-{{ tournament.id }}" aria-expanded="false" aria-controls="collapse-{{ tournament.id }}">+</button>
+    </td>
+    <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
+    <td>{{ tournament.date }}</td>
+  </tr>
+  <tr class="zeroPadding">
+    <td class="zeroPadding" colspan="3">
+      <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
+        {% if tournament.sets %}
+          <table class="table table-light">
+            <thead>
+              <tr>
+                <th>Player 1</th>
+                <th>Player 2</th>
+                <th>Results</th>
+                <!-- Add other relevant columns -->
+              </tr>
+            </thead>
+            <tbody>
+              {% for set in tournament.sets %}
+                <tr class="{% if set.player1_score > set.player2_score %}table-success{% elif set.player1_score < set.player2_score %}table-danger{% endif %}">
+                  <td>{{ set.player1_name }}</td>
+                  <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
+                <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
+                  <!-- Add other relevant data -->
+                </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        {% else %}
+          <p>No sets found</p>
+        {% endif %}
+      </div>
+    </td>
+  </tr>
+{% endfor %}
         </tbody>
     </table>
     <div class="pagination">
@@ -197,53 +221,6 @@
         </span>
     </div>
 </div>
-<div id="setsTable" class="table-container" style="display: none;">
-   <!-- Sets Table here -->
-
-    <h2>Sets</h2>
-    <table class="table table-light">
-    <thead>
-      <tr>
-        <th>Player 1</th>
-        <th>Player 2</th>
-        <th>Player 1 Score</th>
-        <th>Player 2 Score</th>
-        <th>Tournament</th>
-        <th>Date</th>
-          <th>Admin</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for set in sets %}
-        <tr>
-          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
-          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
-          <td>{{ set.player1_score }}</td>
-          <td>{{ set.player2_score }}</td>
-          <td><a href="{% url 'tournament_details' pk=set.tournament.pk %}">{{ set.tournament.name }}</a></td>
-          <td>{{ set.tournament.date }}</td>
-          <td>  <a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit
-        </button></a> </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-    </table>
-    <div class="pagination">
-      <span class="step-links">
-        {% if sets.has_previous %}
-            <a href="?page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">« first</a>
-            <a href="?page={{ sets.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">previous</a>
-        {% endif %}
-
-        <span class="current-page">
-            Page {{ sets.number }} of {{ sets.paginator.num_pages }}.
-        </span>
-        {% if sets.has_next %}
-            <a href="?page={{ sets.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">next</a>
-            <a href="?page={{ sets.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">last »</a>
-        {% endif %}
-      </span>
-    </div>
 </div>
 <script type="text/javascript">
     document.getElementById('pr_view').addEventListener('change', function() {
@@ -264,7 +241,6 @@
 function showTable(tableId) {
    // Hide all tables first
    document.getElementById('h2hTable').style.display = 'none';
-   document.getElementById('setsTable').style.display = 'none';
    document.getElementById('tournamentsTable').style.display = 'none';
 
    // Then show the selected table

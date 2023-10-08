@@ -251,7 +251,7 @@ def create_pr_season1(request):
 class PlayerListView(generic.ListView):
     model = Player
     template_name = 'main/players.html'
-    paginate_by = 25
+    paginate_by = 40
     ordering = [Lower('name')]
     queryset = Player.objects.all()
 
@@ -358,6 +358,7 @@ class PlayerDetailView(DetailView):
                 set_display_list.append(set_display)
 
             # Assign the list of SetDisplay objects to opponent_data['sets']
+            set_display_list.reverse()
             opponent_data['sets'] = set_display_list
         # H2H Queries
         context['h2h'] = h2h_list
@@ -386,6 +387,43 @@ class PlayerDetailView(DetailView):
         paged_tournaments = tournaments_paginator.get_page(tournaments_page_number)
         context['tournaments'] = paged_tournaments
 
+        SetDisplay = namedtuple('SetDisplay',
+                                ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
+                                 'tournament_date', 'id', 'p2_id'])
+
+        for tournament in context['tournaments']:
+            tournament_sets = Set.objects.filter(
+                Q(tournament=tournament),
+                Q(player1=player) | Q(player2=player)
+            )
+            if pr_season_id:
+                tournament_sets = tournament_sets.filter(tournament__pr_season_id=pr_season_id)
+
+            set_display_list = []
+            for set in tournament_sets:
+                # Determine the ordering of players and their corresponding scores
+                if set.player1 == player:
+                    p1_name = set.player1.name
+                    p2_name = set.player2.name
+                    p1_score = set.player1_score
+                    p2_score = set.player2_score
+                    p2_id = set.player2.id
+                else:
+                    p1_name = set.player2.name
+                    p2_name = set.player1.name
+                    p1_score = set.player2_score
+                    p2_score = set.player1_score
+                    p2_id = set.player1.id
+
+                # Create a SetDisplay object with the appropriate data and append it to the list
+                set_display = SetDisplay(p1_name, p2_name, p1_score, p2_score, set.tournament.name, set.tournament.date,
+                                         set.id, p2_id)
+                set_display_list.append(set_display)
+
+            # Attach the sets to the tournament object
+            set_display_list.reverse()
+            tournament.sets = set_display_list
+
 
         return context
 
@@ -411,7 +449,20 @@ class TournamentDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         tournament = self.get_object()
         sets = Set.objects.filter(tournament_id=tournament.id)
+        # Getting distinct players from player1 and player2 fields
+        player1_ids = sets.values_list('player1', flat=True).distinct()
+        player2_ids = sets.values_list('player2', flat=True).distinct()
+
+        # Combine player1_ids and player2_ids and remove duplicates
+        all_player_ids = set(list(player1_ids) + list(player2_ids))
+
+        # Count of distinct players
+        distinct_player_count = len(all_player_ids)
+        tournament.entrant_count = distinct_player_count
+        tournament.save()
+        context['count'] = distinct_player_count
         context['sets'] = sets
+
         results = TournamentResults.objects.filter(tournament_id=tournament).order_by('placement')
         context['results'] = results
         return context
