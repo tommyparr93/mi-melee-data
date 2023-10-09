@@ -2,6 +2,10 @@
 {% block title %}Tournament Details{% endblock %}
 {% block content %}
   <h1>{{ tournament.name }}</h1>
+        <form method="get" id="filter-form">
+                        <input type="checkbox" name="michigan_view" id="michigan_view"  {% if request.GET.michigan_view %}checked{% endif %}>
+        <label for="michigan_view">Michigan View</label>
+        </form>
   <a href="{% url 'admin:main_tournament_change' tournament.id %}" class="btn btn-primary" style="float: right;">Edit</a>
   <p><strong>Date: </strong>{{ tournament.date }}</p>
   <p><strong>Entrants: </strong>{{ count }}</p>

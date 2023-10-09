@@ -163,18 +163,23 @@
               <th>Record</th>
               <th>Placement</th>
             <th>Date</th>
-            <!-- Add other relevant columns -->
           </tr>
         </thead>
         <tbody>
 {% for tournament in tournaments %}
-  <tr>
+
+    {% if tournament.placement == 1 %}
+  <tr style="font-weight: bold">
+
+      {% else %}
+      <tr>
+      {% endif %}
     <td>
       <button data-toggle="collapse" data-target="#collapse-{{ tournament.id }}" aria-expanded="false" aria-controls="collapse-{{ tournament.id }}">+</button>
     </td>
     <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
       <td>{{ tournament.record.wins }} - {{tournament.record.losses }}</td>
-      <td> {{ tournament.placement }} / {{tournament.entrant_count}}</td>
+      <td>{{ tournament.placement }} / {{tournament.entrant_count}}</td>
     <td>{{ tournament.date }}</td>
   </tr>
   <tr class="zeroPadding">
@@ -188,7 +193,6 @@
                 <th>Player 2</th>
                 <th>Results</th>
                   <th>Admin</th>
-                <!-- Add other relevant columns -->
               </tr>
             </thead>
             <tbody>
@@ -198,7 +202,6 @@
                   <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
                 <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
                     <td><a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a> </td>
-                  <!-- Add other relevant data -->
                 </tr>
               {% endfor %}
             </tbody>

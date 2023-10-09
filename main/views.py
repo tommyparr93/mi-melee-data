@@ -54,7 +54,7 @@ def get_head_to_head_results(player, sets):
 
     opponent_records = []
     for opponent in opponents_queryset:
-        matches = sets.filter(Q(player1=opponent) | Q(player2=opponent))
+        matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
         wins = 0
         losses = 0
         for match in matches:
@@ -119,18 +119,6 @@ def join_duplicate(request):
                 duplicate_account = request.session.get('duplicate_account')
                 merge_accounts(main_account, duplicate_account)
                 from django.db.models import F, Q
-
-                Set.objects.filter(
-                    ~Q(winner_id=F('player1')) &
-                    ~Q(winner_id=F('player2')) &
-                    (Q(player1_score__gt=F('player2_score')) | Q(player2_score__gt=F('player1_score')))
-                ).update(
-                    winner_id=Case(
-                        When(player1_score__gt=F('player2_score'), then=F('player1')),
-                        When(player2_score__gt=F('player1_score'), then=F('player2')),
-                        default=F('winner_id')
-                    )
-                )
                 merge_success = True
 
     else:
@@ -161,6 +149,19 @@ def merge_accounts(main_account, duplicate_account):
 
         # Delete the old player record
         Player.objects.filter(id=duplicate_account).delete()
+
+        # UpdateWinnerID
+        Set.objects.filter(
+            ~Q(winner_id=F('player1')) &
+            ~Q(winner_id=F('player2')) &
+            (Q(player1_score__gt=F('player2_score')) | Q(player2_score__gt=F('player1_score')))
+        ).update(
+            winner_id=Case(
+                When(player1_score__gt=F('player2_score'), then=F('player1')),
+                When(player2_score__gt=F('player1_score'), then=F('player2')),
+                default=F('winner_id')
+            )
+        )
 
         return print("COMPLETED")
 
