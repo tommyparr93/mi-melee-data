@@ -22,7 +22,9 @@
     <div class="stat-container">
         <h1>{{ player.name }}</h1>
     <div class="float-right">
-        <form method="get" style="float: right">
+        <form method="get" style="float: right" id="filter-form">
+                        <input type="checkbox" name="pr_view" id="pr_view"  {% if request.GET.pr_view %}checked{% endif %}>
+        <label for="pr_view">PR View</label>
         <select name="pr_season" id="pr_season">
         <option value="">All Seasons</option>
         {% for pr_season in pr_seasons %}
@@ -33,9 +35,10 @@
         </select>
     </form>
 
+        </div>
+
+        </div>
         <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
-        </div>
-        </div>
     {% if player.main_account %}
         <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
     {% endif %}
@@ -49,13 +52,11 @@
         <p> <strong>Set Record:</strong> {{ calculations.wins }}-{{ calculations.losses }}</p>
         <p><strong>Win Rate:</strong> {{ calculations.win_rate }}%</p>
     </div>
-<a href="#" class="btn btn-primary btn-lg active" onclick="showTable('h2hTable')" style="width: 33%;">Head to Head</a>
-<a href="#" class="btn btn-primary btn-lg active" onclick="showTable('tournamentsTable')" style="width: 33%;">Tournaments</a>
-<div id="h2hTable" class="table-container">
+    <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('h2hTable')" style="width: 33%;">Head to Head</a>
+    <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('tournamentsTable')" style="width: 33%;">Tournaments</a>
+    <div id="h2hTable" class="table-container">
     <h2>H2H</h2>
     <form method="get">
-            <input type="checkbox" name="pr_view" id="pr_view" {% if request.GET.pr_view %}checked{% endif %}>
-        <label for="pr_view">PR View</label>
         </form>
       <table class="table table-light">
         <thead>
@@ -68,6 +69,7 @@
           </tr>
         </thead>
       <tbody>
+
       {% for opponent in opponents %}
 
       <tr>
@@ -126,7 +128,7 @@
     </tr>
       {% empty %}
         <tr>
-          <td colspan="3">No tournaments found</td>
+          <td colspan="5">No tournaments found</td>
         </tr>
       {% endfor %}
       </tbody>
@@ -158,6 +160,8 @@
           <tr>
               <th style="white-space: nowrap; width: 1%;">See Details</th>
             <th>Tournament Name</th>
+              <th>Record</th>
+              <th>Placement</th>
             <th>Date</th>
             <!-- Add other relevant columns -->
           </tr>
@@ -169,10 +173,12 @@
       <button data-toggle="collapse" data-target="#collapse-{{ tournament.id }}" aria-expanded="false" aria-controls="collapse-{{ tournament.id }}">+</button>
     </td>
     <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
+      <td>{{ tournament.record.wins }} - {{tournament.record.losses }}</td>
+      <td> {{ tournament.placement }} / {{tournament.entrant_count}}</td>
     <td>{{ tournament.date }}</td>
   </tr>
   <tr class="zeroPadding">
-    <td class="zeroPadding" colspan="3">
+    <td class="zeroPadding" colspan="6">
       <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
         {% if tournament.sets %}
           <table class="table table-light">
@@ -181,6 +187,7 @@
                 <th>Player 1</th>
                 <th>Player 2</th>
                 <th>Results</th>
+                  <th>Admin</th>
                 <!-- Add other relevant columns -->
               </tr>
             </thead>
@@ -190,6 +197,7 @@
                   <td>{{ set.player1_name }}</td>
                   <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
                 <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
+                    <td><a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a> </td>
                   <!-- Add other relevant data -->
                 </tr>
               {% endfor %}
@@ -222,6 +230,7 @@
     </div>
 </div>
 </div>
+
 <script type="text/javascript">
     document.getElementById('pr_view').addEventListener('change', function() {
         this.form.submit();
@@ -262,6 +271,7 @@ $('.collapse').on('show.bs.collapse', function() {
 $('.collapse').on('hide.bs.collapse', function() {
   $(this).parent().addClass("zeroPadding");
 });
+</script>
 </script>
 
 

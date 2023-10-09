@@ -22,3 +22,13 @@ WHERE LOWER(p.name) IN (
 )
 GROUP BY p.id
 ORDER BY p.name ASC;
+
+
+-- FIX DUPLICATE IDS FOR WINNER ID
+UPDATE public.set
+SET winner_id = CASE
+    WHEN player1_score > player2_score THEN player1
+    WHEN player2_score > player1_score THEN player2
+    ELSE winner_id -- keep the current winner_id if scores are equal
+END
+WHERE winner_id != player1 AND winner_id != player2;

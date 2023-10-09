@@ -1,12 +1,14 @@
 from django.db import transaction
 from django.http import HttpResponse
 from django.core.paginator import Paginator
+from sqlparse.sql import Case
+
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet, DuplicatePlayer, ConfirmMergeForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
 from django.db.models.functions import Lower
-from django.db.models import Q
+from django.db.models import F, Q, When, Case
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple
@@ -116,7 +118,19 @@ def join_duplicate(request):
                 main_account = request.session.get('main_account')
                 duplicate_account = request.session.get('duplicate_account')
                 merge_accounts(main_account, duplicate_account)
+                from django.db.models import F, Q
 
+                Set.objects.filter(
+                    ~Q(winner_id=F('player1')) &
+                    ~Q(winner_id=F('player2')) &
+                    (Q(player1_score__gt=F('player2_score')) | Q(player2_score__gt=F('player1_score')))
+                ).update(
+                    winner_id=Case(
+                        When(player1_score__gt=F('player2_score'), then=F('player1')),
+                        When(player2_score__gt=F('player1_score'), then=F('player2')),
+                        default=F('winner_id')
+                    )
+                )
                 merge_success = True
 
     else:
@@ -283,7 +297,7 @@ class PlayerDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.get_object()
-        sets = Set.objects.filter(Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
+        sets = Set.objects.filter(Q(pr_eligible=True), Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
 
 
         # PR Season Filter
@@ -293,7 +307,7 @@ class PlayerDetailView(DetailView):
 
 
         if pr_season_id:
-            sets = Set.objects.filter(
+            sets = Set.objects.filter(Q(pr_eligible=True),
                 Q(player1=player) | Q(player2=player),
                 tournament__pr_season_id=pr_season_id
             ).order_by('-tournament__date')
@@ -326,7 +340,6 @@ class PlayerDetailView(DetailView):
             h2h_list = get_head_to_head_results(player, sets)
 
 
-        # I'm really confused whats actually happening, it might just be because I'm tired but like the variable names don't match and i'm so confused
         SetDisplay = namedtuple('SetDisplay',
                                 ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
                                  'tournament_date', 'id'])
@@ -387,6 +400,25 @@ class PlayerDetailView(DetailView):
         paged_tournaments = tournaments_paginator.get_page(tournaments_page_number)
         context['tournaments'] = paged_tournaments
 
+        for tournament in context['tournaments']:
+            tournament_sets = Set.objects.filter(
+                Q(tournament=tournament),
+                Q(player1=player) | Q(player2=player)
+            )
+            try:
+                placement_obj = TournamentResults.objects.get(Q(tournament=tournament), Q(player_id=player))
+                tournament.placement = placement_obj.placement
+            except TournamentResults.DoesNotExist:
+                tournament.placement = "Placement to be fixed"
+            tournament.record = player_detail_calculations(player, tournament_sets)
+
+            # record now is an attribute of tournament containing the calculation result.
+
+            # ... other code ...
+
+        # Then add this to the context
+        context['tournaments'] = context['tournaments']
+
         SetDisplay = namedtuple('SetDisplay',
                                 ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
                                  'tournament_date', 'id', 'p2_id'])
@@ -401,6 +433,7 @@ class PlayerDetailView(DetailView):
 
             set_display_list = []
             for set in tournament_sets:
+
                 # Determine the ordering of players and their corresponding scores
                 if set.player1 == player:
                     p1_name = set.player1.name
@@ -423,6 +456,7 @@ class PlayerDetailView(DetailView):
             # Attach the sets to the tournament object
             set_display_list.reverse()
             tournament.sets = set_display_list
+
 
 
         return context
