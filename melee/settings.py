@@ -28,7 +28,7 @@ environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'test'#env("SECRET_KEY")
 # SECURITY WARtNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = ['localhost','mimeleestats.com', 'www.mimeleestats.com', '52.15.190.122', '127.0.0.1']
 

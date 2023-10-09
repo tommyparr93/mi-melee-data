@@ -204,6 +204,12 @@ class Tournament(models.Model):
     class Meta:
         db_table = 'tournament'
 
+    @property
+    def winner(self):
+        winner_result = TournamentResults.objects.filter(tournament=self, placement=1).first()
+        if winner_result:
+            return winner_result.player_id  # assuming player_id is the Player instance you want
+        return None
 
 # something really funky is happening here due to django not liking composite keys
 # This is because I built the database with composite keys originally,

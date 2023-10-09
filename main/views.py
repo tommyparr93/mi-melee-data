@@ -8,7 +8,7 @@ from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeason
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
 from django.db.models.functions import Lower
-from django.db.models import F, Q, When, Case
+from django.db.models import F, Q, When, Case, Count
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple
@@ -287,6 +287,35 @@ class TournamentListView(generic.ListView):
     paginate_by = 25
     ordering = ['-date']
     queryset = Tournament.objects.all()
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+
+        # Getting distinct PRSeasons related to the displayed tournaments
+        all_pr_season_ids = Tournament.objects.values_list('pr_season', flat=True).distinct()
+        all_pr_seasons = PRSeason.objects.filter(id__in=all_pr_season_ids)
+
+        # Add pr_seasons to context
+        context['pr_seasons'] = all_pr_seasons
+
+        return context
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        query = self.request.GET.get('q')
+        pr_season_id = self.request.GET.get('pr_season')
+
+
+        if query:
+            queryset = super().get_queryset()
+            queryset = queryset.filter(Q(name__icontains=query))
+
+        if pr_season_id:
+            queryset = queryset.filter(
+                pr_season_id=pr_season_id)  # Assuming pr_season is a foreign key in your Tournament model
+
+        return queryset
+
 
 
 # need to refactor have logic on this front to pass primary player and "opponent" within the sets context

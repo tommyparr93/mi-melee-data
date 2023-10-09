@@ -2,12 +2,31 @@
 {% block title %}Tournament List{% endblock %}
 {% block content %}
   <h1>Tournaments</h1>
+    <form method="get" style="float: right" id="filter-form">
+        <select name="pr_season" id="pr_season">
+        <option value="">All Seasons</option>
+        {% for pr_season in pr_seasons %}
+        <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>
+            {{ pr_season.name }}
+        </option>
+        {% endfor %}
+        </select>
+            <input type="submit" value="Filter">
+    </form>
+    <form method="get" action="{% url 'tournaments' %}">
+                <input type="text" name="q" placeholder="Search tournaments">
+                <button type="submit">Search</button>
+    <!--            <input type="checkbox" id="region-filter" name="region" value="7">-->
+    <!--            <label>Search for Michigan</label>-->
+          </form>
   <table>
     <thead>
       <tr>
           <th>Tournament</th>
           <th>Date</th>
+          <th>Winner</th>
           <th>Entrants</th>
+
       </tr>
     </thead>
     <tbody>
@@ -15,7 +34,13 @@
         <tr>
             <td><a href="{% url 'tournament_details' pk=tournament.pk %}">{{ tournament.name }}</a></td>
             <td>{{ tournament.date }}</td>
+                        <td>             {% if tournament.winner and tournament.winner.id %}
+                <a href="{% url 'player_detail' pk=tournament.winner.id %}">{{ tournament.winner }}</a>
+            {% else %}
+                 {{ tournament.winner }} <!-- or some default value or text -->
+            {% endif %}</td>
             <td>{{ tournament.entrant_count }}</td>
+
         </tr>
       {% endfor %}
     </tbody>
@@ -39,3 +64,9 @@
     </span>
   </div>
 {% endblock %}
+
+<script type="text/javascript">
+    document.getElementById('pr_season').addEventListener('change', function() {
+        this.form.submit();
+    });
+</script>
