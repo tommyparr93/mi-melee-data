@@ -376,7 +376,7 @@ class PlayerDetailView(DetailView):
 
         for opponent_data in h2h_list:
             opponent = opponent_data['opponent']
-            opponent_sets = Set.objects.filter(
+            opponent_sets = Set.objects.filter(Q(pr_eligible=True),
                 (Q(player1=player) & Q(player2=opponent)) |
                 (Q(player2=player) & Q(player1=opponent))
             )
