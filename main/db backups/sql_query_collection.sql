@@ -32,3 +32,50 @@ SET winner_id = CASE
     ELSE winner_id -- keep the current winner_id if scores are equal
 END
 WHERE winner_id != player1 AND winner_id != player2;
+
+
+-- find players with most tournaments and sets
+
+SELECT
+    p.name,
+	p.region_code,
+    COUNT(DISTINCT s.id) as set_count,
+	COUNT(DISTINCT t.id) as "appearances"
+
+FROM
+    player p
+LEFT JOIN (
+    SELECT player1 as player_id, id, tournament_id FROM "set"
+    UNION
+    SELECT player2 as player_id, id, tournament_id FROM "set"
+) s ON s.player_id = p.id
+JOIN tournament t ON t.id = s.tournament_id
+WHERE
+    t.pr_season_id = 2
+GROUP BY
+    p.name,
+	p.region_code
+	ORDER BY appearances desc
+
+
+
+-- update tournament region to michigan
+
+UPDATE tournament
+SET region_code = 7
+WHERE city IN (
+    'Ann Arbor',
+    'Dearborn',
+    'Fraser',
+    'Grand Rapids',
+    'Ypsilanti',
+    'Walker',
+    'Bay City',
+    'Midland',
+    'Allendale Charter Township',
+    'Mount Pleasant',
+    'Detroit',
+    'Houghton',
+    'Lansing',
+    'East Lansing'
+);
