@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}Current Pr{% endblock %}
+{% block content %}
+<div class="table-responsive" style="overflow-y: auto; max-height: 100vh;">
+<table class="table table-sm table-striped" style="font-size: 12px;">
+    <thead>
+        <tr>
+            <th></th>  <!-- Empty cell for the corner of the table -->
+            <!-- Header row with player names -->
+            {% for player in players %}
+                <th>{{ player.name }}</th>
+            {% endfor %}
+        </tr>
+    </thead>
+    <tbody>
+        {% for row in table_data %}
+            <tr>
+                <td>{{ row.player_name }}</td>
+                {% for opponent in row.opponents %}
+                    <td>{{ opponent.wins }} - {{ opponent.losses }}</td>
+                {% endfor %}
+            </tr>
+        {% endfor %}
+    </tbody>
+</table>
+    </div>
+{% endblock %}

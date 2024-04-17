@@ -50,6 +50,7 @@ def get_head_to_head_results(player, sets):
     sets = sets.filter(pr_eligible=True)
     opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
     opponents.remove(player.id)
+
     opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
 
     opponent_records = []
@@ -68,6 +69,48 @@ def get_head_to_head_results(player, sets):
             'wins': wins,
             'losses': losses,
             'win_rate': int(wr),
+            'count': wins + losses,
+            'pr_notable': opponent.pr_notable
+        }
+        opponent_records.append(opponent_record)
+
+    opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
+
+    return opponent_records
+
+def get_head_to_head_results2(player, sets):
+    sets = sets.filter(pr_eligible=True)
+    # opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
+    # opponents.remove(player.id)
+    opponents = (
+        Player.objects.filter(
+            Q(id__in=sets.values_list('player1', flat=True)) |
+            Q(id__in=sets.values_list('player2', flat=True)),
+            pr_eligible=True
+        )
+        .exclude(id=player.id)
+        .order_by('name')
+    )
+
+    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
+    print("HERE")
+    opponent_records = []
+    for opponent in opponents_queryset:
+        matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
+        matches = matches.filter(Q(pr_eligible=True), Q(player1=player) | Q(player2=player))
+        wins = 0
+        losses = 0
+        for match in matches:
+            if match.winner_id == player.id:
+                wins += 1
+            else:
+                losses += 1
+
+        opponent_record = {
+            'opponent': opponent.name,
+            'wins': wins,
+            'losses': losses,
+            'win_rate': 0,
             'count': wins + losses,
             'pr_notable': opponent.pr_notable
         }
@@ -543,3 +586,44 @@ class PrEligiblePlayerListView(PlayerListView):
         context = super().get_context_data(**kwargs)
         context['pr_season'] = 2  # or whatever value you want to set
         return context
+
+
+
+def pr_table(request):
+    # Get all players who are pr_eligible
+    print("aa")
+    players = Player.objects.filter(pr_eligible=True).order_by('name')
+    player_names = [player.name for player in players]
+
+    # Generate the head-to-head results for each player
+    h2h_results = {}
+    placement = 0
+    for player in players:
+        print("a2")
+        h2h_results[player.name] = get_head_to_head_results2(player, Set.objects.filter(pr_eligible=True, tournament__pr_season_id=6))
+
+    table_data = []
+    for player_y, opponent_results in h2h_results.items():
+        row = {'player_name': player_y, 'opponents': []}
+
+        print(placement)
+        opponent_results_sorted = sorted(opponent_results, key=lambda x: x['opponent'])
+        for opponent in opponent_results_sorted:
+            row['opponents'].append(
+                {'name': opponent['opponent'], 'wins': opponent['wins'], 'losses': opponent['losses']})
+
+        row['opponents'].append({'name': player_y, 'wins': "N/A", 'losses': ""})
+        sorted_opponents = sorted(row['opponents'], key=lambda x: x['name'].lower())
+        row['opponents'] = sorted_opponents
+        table_data.append(row)
+
+    context = {
+        'players': players,
+        'h2h_results': h2h_results,
+        'table_data': table_data
+    }
+
+
+
+
+    return render(request, 'main/pr-table.html', context)
