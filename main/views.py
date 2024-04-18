@@ -24,7 +24,7 @@ def player_detail_calculations(player, sets):
     losses = sets.exclude(winner_id=player.id).count()
     wr = (wins / sets.count()) * 100
     num_tournaments = sets.values('tournament_id').distinct().count()
-    pr_rank = PRSeasonResult.objects.filter(Q(player_id=player.id) & Q(pr_season_id=1)).first()
+    pr_rank = PRSeasonResult.objects.filter(Q(player_id=player.id) & Q(pr_season_id=2)).first()     #FIX THIS AT SOME POINT, HARDCODED PR SEASON
     if pr_rank:
         stats = {
             'wins': wins,
@@ -93,7 +93,6 @@ def get_head_to_head_results2(player, sets):
     )
 
     opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
-    print("HERE")
     opponent_records = []
     for opponent in opponents_queryset:
         matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
@@ -278,7 +277,7 @@ def create_pr_season(request):
     else:
         pr_season_form = PRSeasonForm()
         pr_season_result_formset = PRSeasonResultFormSet(queryset=PRSeasonResult.objects.none())
-        pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7)
+        pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7).order_by(Lower('name'))
 
     context = {
         'pr_season_form': pr_season_form,
@@ -374,7 +373,7 @@ class PlayerDetailView(DetailView):
 
 
         # PR Season Filter
-        pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct()
+        pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct().order_by('-end_date')
         context['pr_seasons'] = pr_seasons
         pr_season_id = self.request.GET.get('pr_season')
 
@@ -584,30 +583,28 @@ class PrEligiblePlayerListView(PlayerListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['pr_season'] = 2  # or whatever value you want to set
+        context['pr_season'] = 6  # or whatever value you want to set
         return context
 
 
 
 def pr_table(request):
     # Get all players who are pr_eligible
-    print("aa")
-    players = Player.objects.filter(pr_eligible=True).order_by('name')
+    players = Player.objects.filter(pr_eligible=True).order_by(Lower('name'))
+
     player_names = [player.name for player in players]
 
     # Generate the head-to-head results for each player
     h2h_results = {}
-    placement = 0
     for player in players:
-        print("a2")
         h2h_results[player.name] = get_head_to_head_results2(player, Set.objects.filter(pr_eligible=True, tournament__pr_season_id=6))
 
     table_data = []
     for player_y, opponent_results in h2h_results.items():
-        row = {'player_name': player_y, 'opponents': []}
+        row = {'player_name': player_y, 'opponents': [], 'player_obj': players.get(name=player_y)}
 
-        print(placement)
-        opponent_results_sorted = sorted(opponent_results, key=lambda x: x['opponent'])
+
+        opponent_results_sorted = sorted(opponent_results, key=lambda x: x['opponent'].lower())
         for opponent in opponent_results_sorted:
             row['opponents'].append(
                 {'name': opponent['opponent'], 'wins': opponent['wins'], 'losses': opponent['losses']})

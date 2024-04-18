@@ -1,4 +1,5 @@
 from django import forms
+from django.db.models.functions import Lower
 from django.forms import ModelForm, modelformset_factory, formset_factory
 from .models import PRSeason, Player, PRSeasonResult
 from .widgets import BootStrapDateTimePickerInput
@@ -53,5 +54,5 @@ pr_season_form = PRSeasonForm()
 pr_season_result_formset = PRSeasonResultFormSet(queryset=PRSeasonResult.objects.none())
 
 # Set the region filter for the player field in the formset
-pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7)
+pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7).order_by(Lower('name'))
 

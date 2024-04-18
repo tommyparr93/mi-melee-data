@@ -1,24 +1,68 @@
 {% extends 'base.html' %}
-{% block title %}Current Pr{% endblock %}
+{% block title %}PR H2H Table{% endblock %}
 {% block content %}
-<div class="table-responsive" style="overflow-y: auto; max-height: 100vh;">
-<table class="table table-sm table-striped" style="font-size: 12px;">
-    <thead>
+
+<style>
+    /* CSS for sticky header */
+
+    .sticky-col {
+        position: sticky;
+        left: 0;
+        z-index: 2; /* Ensure first column stays above table content */
+        background-color: #f8f9fa !important; /* Set the background color to white or any color you prefer */
+        border-right: 1px solid #dee2e6;
+    }
+    .fixed-column {
+        min-width: 70px; /* Adjust the width value as needed */
+        max-width: 70px; /* Optional: Add max-width for responsive design */
+        white-space: nowrap; /* Optional: Prevent text wrapping */
+        overflow: hidden; /* Optional: Hide overflow content */
+        text-overflow: ellipsis; /* Optional: Show ellipsis for overflow content */
+    }
+    .sticky-header th {
+        position: sticky;
+        top: 0;
+        z-index: 1; /* Ensure header stays above table content */
+        background-color: #f8f9fa; /* Background color for header */
+    }
+
+     .scroll-container {
+        overflow-x: auto;
+        overflow-y: hidden;
+        max-height: 100vh;
+        background-color: #ffffff;
+    }
+
+</style>
+
+
+<div class="table-responsive" style="overflow-y: auto; max-height: 95vh;">
+<table class="table table-sm table-striped " style="font-size: 14px;">
+    <thead class="sticky-header">
         <tr>
             <th></th>  <!-- Empty cell for the corner of the table -->
             <!-- Header row with player names -->
             {% for player in players %}
-                <th>{{ player.name }}</th>
+                <th class="fixed-column"><a href="{% url 'player_detail' pk=player.pk %}">{{ player.name }}</a></th>
             {% endfor %}
         </tr>
     </thead>
     <tbody>
         {% for row in table_data %}
             <tr>
-                <td>{{ row.player_name }}</td>
+                <td class="sticky-col"><b><a href="{% url 'player_detail' pk=row.player_obj.pk %}">{{ row.player_name }}</a></b></td>
                 {% for opponent in row.opponents %}
-                    <td>{{ opponent.wins }} - {{ opponent.losses }}</td>
+                <td class=" {% if opponent.losses == '' %}table-dark
+                            {% elif opponent.wins < opponent.losses %}table-danger
+                            {% elif opponent.wins == opponent.losses and opponent.wins > 0 %}table-info
+                            {% elif opponent.wins > opponent.losses %}table-success{% endif %}">
+                   {% if opponent.wins == 'N/A' %}
+                        N/A
+                    {% else %}
+                        {{ opponent.wins }}-{{ opponent.losses }}
+                    {% endif %}
                 {% endfor %}
+                </td>
             </tr>
         {% endfor %}
     </tbody>
