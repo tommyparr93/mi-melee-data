@@ -336,7 +336,7 @@ class TournamentListView(generic.ListView):
 
         # Getting distinct PRSeasons related to the displayed tournaments
         all_pr_season_ids = Tournament.objects.values_list('pr_season', flat=True).distinct()
-        all_pr_seasons = PRSeason.objects.filter(id__in=all_pr_season_ids)
+        all_pr_seasons = PRSeason.objects.filter(id__in=all_pr_season_ids).order_by('-end_date')
 
         # Add pr_seasons to context
         context['pr_seasons'] = all_pr_seasons

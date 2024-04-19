@@ -56,8 +56,8 @@
         </span>
 
         {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}&pr_season={{pr_season}}">next</a>
-            <a href="?page={{ page_obj.paginator.num_pages }}&pr_season={{pr_season}}">last &raquo;</a>
+            <a href="?page={{ page_obj.next_page_number }}&pr_season={{ request.GET.pr_season }}&q={{ request.GET.search }}">next</a>
+            <a href="?page={{ page_obj.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&q={{ request.GET.search }}">last &raquo;</a>
         {% endif %}
     </span>
   </div>

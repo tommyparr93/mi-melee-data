@@ -1,10 +1,16 @@
 {% extends 'base.html' %}
+
 {% block title %}Current Pr{% endblock %}
 {% block content %}
     <h1>{{ pr_season.name }}</h1>
     <p><strong>Start date:</strong> {{ pr_season.start_date }}</p>
     <p><strong>End date:</strong> {{ pr_season.end_date }}</p>
     <p><strong>Active PR</strong> {{ pr_season.is_active }}</p>
+      {% load static %}
+      {% load bootstrap5 %}
+      {% bootstrap_css %}
+      {% bootstrap_javascript %}
+
     <h2>Members</h2>
     <table>
         <thead>
