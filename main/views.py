@@ -583,7 +583,7 @@ class PrEligiblePlayerListView(PlayerListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['pr_season'] = 6  # or whatever value you want to set
+        context['pr_season'] = PRSeason.objects.filter(is_active=True).values_list('id', flat=True).first()  # sets to active season MUST HAVE ONLY ONE ACTIVE SEASON)
         return context
 
 
@@ -593,11 +593,11 @@ def pr_table(request):
     players = Player.objects.filter(pr_eligible=True).order_by(Lower('name'))
 
     player_names = [player.name for player in players]
-
+    active_pr_season = PRSeason.objects.filter(is_active=True).values_list('id', flat=True).first()
     # Generate the head-to-head results for each player
     h2h_results = {}
     for player in players:
-        h2h_results[player.name] = get_head_to_head_results2(player, Set.objects.filter(pr_eligible=True, tournament__pr_season_id=6))
+        h2h_results[player.name] = get_head_to_head_results2(player, Set.objects.filter(pr_eligible=True, tournament__pr_season_id=active_pr_season))
 
     table_data = []
     for player_y, opponent_results in h2h_results.items():
