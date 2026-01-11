@@ -9,6 +9,7 @@ admin.site.register(Tournament)
 admin.site.register(Region)
 admin.site.register(PRSeason)
 admin.site.register(PRSeasonResult)
+admin.site.register(Set)
 
 
 class PlayerAdmin(admin.ModelAdmin):
@@ -17,10 +18,6 @@ class PlayerAdmin(admin.ModelAdmin):
     list_per_page = 50
     search_fields = ('name',)
 
-class SetAdmin(admin.ModelAdmin):
-    list_display = ['id', 'player1', 'player2', 'player1_score', 'player2_score', 'tournament', 'pr_eligible']  # Add 'pr_eligible' to list_display
-    list_filter = ['pr_eligible']
 
 
 admin.site.register(Player, PlayerAdmin)
-admin.site.register(Set, SetAdmin)

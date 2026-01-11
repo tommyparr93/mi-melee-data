@@ -18,7 +18,7 @@
         <th>Player 2</th>
         <th>Player 1 Score</th>
         <th>Player 2 Score</th>
-        <th>Tournament</th>
+        <th>Round</th>
       </tr>
     </thead>
     <tbody>
@@ -29,6 +29,7 @@
           <td>{{ set.player1_score }}</td>
           <td>{{ set.player2_score }}</td>
           <td>{{ set.location }}</td>
+          <td><a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a> </td>
         </tr>
       {% endfor %}
     </tbody>

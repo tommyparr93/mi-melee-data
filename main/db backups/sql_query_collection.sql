@@ -79,3 +79,37 @@ WHERE city IN (
     'Lansing',
     'East Lansing'
 );
+
+-- update dq sets to not be pr_eligible
+
+update public.set
+
+set pr_eligible = FALSE
+
+where player1_score = -1 or player2_score = -1
+
+
+--update players that are null notable
+UPDATE player
+SET pr_notable = false
+WHERE pr_notable IS NULL;
+
+
+-- find players that should be pr_notable
+SELECT
+    p.name AS winner,
+    COUNT(DISTINCT opponent.id) AS unique_pr_wins,
+    STRING_AGG(DISTINCT opponent.name, ', ') AS beaten_eligible_players
+FROM player p
+JOIN "set" s ON p.id = s.winner_id
+JOIN tournament t ON s.tournament_id = t.id
+JOIN pr_season pr ON t.date BETWEEN pr.start_date AND pr.end_date
+JOIN player opponent ON (
+    (s.player1 = p.id AND s.player2 = opponent.id) OR
+    (s.player2 = p.id AND s.player1 = opponent.id)
+)
+WHERE pr.is_active = TRUE
+  AND s.pr_eligible = TRUE        -- The match itself must be ranked
+  AND opponent.pr_eligible = TRUE  -- The person beaten must be PR-eligible
+GROUP BY p.id, p.name
+ORDER BY unique_pr_wins DESC;
