@@ -597,6 +597,8 @@ class PrEligiblePlayerListView(PlayerListView):
             players.sort(key=lambda x: x.stats.get('win_rate', 0), reverse=True)
         elif ordering == 'mi':
             players.sort(key=lambda x: x.mi_tournies, reverse=True)
+        elif ordering == 'oos':
+            players.sort(key=lambda x: x.oos_tournies, reverse=True)
         elif ordering == 'total':
             players.sort(key=lambda x: x.total_tournies, reverse=True)
         elif ordering == 'name':
