@@ -182,36 +182,36 @@
       <td>{{ tournament.placement }} / {{tournament.entrant_count}}</td>
     <td>{{ tournament.date }}</td>
   </tr>
-  <tr class="zeroPadding">
-    <td class="zeroPadding" colspan="6">
-      <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
-        {% if tournament.sets %}
-          <table class="table table-light">
-            <thead>
-              <tr>
-                <th>Player 1</th>
-                <th>Player 2</th>
-                <th>Results</th>
-                  <th>Admin</th>
+<tr class="zeroPadding">
+  <td class="zeroPadding" colspan="6">
+    <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
+      {% if tournament.display_sets %}
+        <table class="table table-light">
+          <thead>
+            <tr>
+              <th>Player 1</th>
+              <th>Player 2</th>
+              <th>Results</th>
+              <th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+              {% for set in tournament.display_sets %}
+              <tr class="{% if set.p1_score > set.p2_score %}table-success{% else %}table-danger{% endif %}">
+                  <td>{{ set.player1_name }}</td>
+                  <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
+                  <td>{{ set.p1_score }}-{{ set.p2_score }}</td>
+                  <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
               </tr>
-            </thead>
-            <tbody>
-                {% for set in tournament.display_sets %}
-                <tr class="{% if set.p1_score > set.p2_score %}table-success{% else %}table-danger{% endif %}">
-                    <td>{{ set.player1_name }}</td>
-                    <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
-                    <td>{{ set.p1_score }}-{{ set.p2_score }}</td>
-                    <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-          </table>
-        {% else %}
-          <p>No sets found</p>
-        {% endif %}
-      </div>
-    </td>
-  </tr>
+              {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p>No sets found</p>
+      {% endif %}
+    </div>
+  </td>
+</tr>
 {% endfor %}
         </tbody>
     </table>
