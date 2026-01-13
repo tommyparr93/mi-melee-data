@@ -7,11 +7,11 @@ from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeas
 from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet, DuplicatePlayer, ConfirmMergeForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.views import generic
-from django.db.models.functions import Lower
-from django.db.models import F, Q, When, Case, Count
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple, defaultdict
+from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch
+from django.db.models.functions import Cast, Lower
 
 SetDisplay = namedtuple('SetDisplay', [
     'player1_name', 'player2_name', 'player1_score', 'player2_score',
@@ -539,17 +539,73 @@ class TournamentDetailView(DetailView):
 
 
 class PrEligiblePlayerListView(PlayerListView):
+    template_name = 'main/pr_eligible_players.html'
+    context_object_name = 'players'
+    paginate_by = 50
 
     def get_queryset(self):
-        queryset = super().get_queryset()
-        # Filter to include only Players where pr_eligible is True
-        return queryset.filter(pr_eligible=True)
+        active_season = PRSeason.objects.filter(is_active=True).first()
+        queryset = Player.objects.filter(pr_eligible=True).select_related('region_code')
+
+        if active_season:
+
+            # 2. PREFETCH: Updated with 'set_set' and 'sets_player2_set'
+            season_sets = Set.objects.filter(
+                tournament__pr_season=active_season,
+                pr_eligible=True  # THIS IS THE CRITICAL LINE
+            ).select_related('tournament')
+            queryset = queryset.prefetch_related(
+                Prefetch('set_set', queryset=season_sets, to_attr='season_sets_p1'),
+                Prefetch('sets_player2_set', queryset=season_sets, to_attr='season_sets_p2')
+            )
+
+        q = self.request.GET.get('q')
+        if q:
+            queryset = queryset.filter(name__icontains=q)
+
+        return queryset.order_by('name')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context['pr_season'] = PRSeason.objects.filter(is_active=True).values_list('id', flat=True).first()  # sets to active season MUST HAVE ONLY ONE ACTIVE SEASON)
-        return context
+        players = list(context['players'])
+        active_season = PRSeason.objects.filter(is_active=True).first()
 
+        for player in players:
+            # 1. Combine all sets
+            p1_sets = getattr(player, 'season_sets_p1', [])
+            p2_sets = getattr(player, 'season_sets_p2', [])
+            all_season_sets = list(p1_sets) + list(p2_sets)
+
+            # 2. Extract Unique Tournaments directly from the Sets
+            # We create a dictionary of { tournament_id: region_code }
+            unique_tournies = {}
+            for s in all_season_sets:
+                if s.tournament_id not in unique_tournies:
+                    unique_tournies[s.tournament_id] = s.tournament.region_code_id
+
+            # 3. Calculate Attendance Counts manually
+            player.mi_tournies = sum(1 for reg in unique_tournies.values() if reg == 7)
+            player.oos_tournies = sum(1 for reg in unique_tournies.values() if reg == 10 or reg is None)
+            player.total_tournies = len(unique_tournies)
+
+            # 4. Run your existing win rate function
+            player.stats = player_detail_calculations(player, all_season_sets)
+
+        # 5. Sorting (Now using the Python-calculated values)
+        ordering = self.request.GET.get('ordering', 'name')
+        if ordering == 'wr':
+            players.sort(key=lambda x: x.stats.get('win_rate', 0), reverse=True)
+        elif ordering == 'mi':
+            players.sort(key=lambda x: x.mi_tournies, reverse=True)
+        elif ordering == 'total':
+            players.sort(key=lambda x: x.total_tournies, reverse=True)
+        elif ordering == 'name':
+            players.sort(key=lambda x: x.name.lower())
+
+        context['players'] = players
+        context['active_season_id'] = active_season.id if active_season else None
+        context['active_season_name'] = active_season.name if active_season else "No Active Season"
+        return context
 
 def pr_table(request):
     # 1. Get eligible players and the active season

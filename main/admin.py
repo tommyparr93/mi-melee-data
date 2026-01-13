@@ -6,10 +6,7 @@ from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult
 # 1. Register simple models as before
 admin.site.register(Region)
 admin.site.register(PRSeason)
-admin.site.register(PRSeasonResult)
 admin.site.register(Tournament)
-admin.site.register(Set)
-
 
 # 2. Optimized PlayerAdmin
 class PlayerAdmin(admin.ModelAdmin):
@@ -53,6 +50,30 @@ class PlayerAdmin(admin.ModelAdmin):
 
         return queryset
 
+
+@admin.register(PRSeasonResult)
+class PRSeasonResultAdmin(admin.ModelAdmin):
+    # This turns the 'player' dropdown into a searchable box
+    autocomplete_fields = ('player',)
+    list_display = ('player', 'rank', 'pr_season')
+    list_filter = ('pr_season',)
+
+@admin.register(Set)
+class SetAdmin(admin.ModelAdmin):
+    # Use the method name 'get_winner_name' in list_display
+    list_display = ('__str__', 'tournament', 'get_winner_name')
+    autocomplete_fields = ('player1', 'player2')
+    list_select_related = ('player1', 'player2', 'tournament')
+    list_per_page = 50
+
+    @admin.display(description='Winner') # Sets the column header text
+    def get_winner_name(self, obj):
+        # Logic to match the winner_id to the correct player object
+        if obj.winner_id == obj.player1_id:
+            return obj.player1.name
+        elif obj.winner_id == obj.player2_id:
+            return obj.player2.name
+        return "Unknown"
 
 # 3. Register Player with the new Admin class
 admin.site.register(Player, PlayerAdmin)

@@ -77,7 +77,14 @@ WHERE city IN (
     'Detroit',
     'Houghton',
     'Lansing',
-    'East Lansing'
+    'East Lansing',
+    'Kalamazoo',
+    'Taylor',
+    'Woodhaven',
+    'Utica',
+    'Warren',
+    'Pontiac'
+
 );
 
 -- update dq sets to not be pr_eligible
