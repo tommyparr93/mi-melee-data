@@ -108,15 +108,15 @@
           </thead>
           <tbody>
             {% for set in opponent.sets %}
-            <tr class="{% if set.player1_score > set.player2_score %}table-success{% elif set.player1_score < set.player2_score %}table-danger{% endif %}">
-                <td>{{ set.player1_name }}</td>
-                <td>{{ set.player2_name }}</td>
-                <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
-                <td>{{ set.tournament_name }}</td>
-                <td>{{ set.tournament_date }}</td>
-                <td> <a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a>  </td>
-              </tr>
-            {% endfor %}
+                <tr class="{% if set.player1_score > set.player2_score %}table-success{% else %}table-danger{% endif %}">
+                    <td>{{ set.player1_name }}</td>
+                    <td>{{ set.player2_name }}</td>
+                    <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
+                    <td>{{ set.tournament_name }}</td>
+                    <td>{{ set.tournament_date|date:"M d, Y" }}</td>
+                    <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                </tr>
+                {% endfor %}
           </tbody>
         </table>
       {% else %}
@@ -196,14 +196,14 @@
               </tr>
             </thead>
             <tbody>
-              {% for set in tournament.sets %}
-                <tr class="{% if set.player1_score > set.player2_score %}table-success{% elif set.player1_score < set.player2_score %}table-danger{% endif %}">
-                  <td>{{ set.player1_name }}</td>
-                  <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
-                <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
-                    <td><a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a> </td>
+                {% for set in tournament.display_sets %}
+                <tr class="{% if set.p1_score > set.p2_score %}table-success{% else %}table-danger{% endif %}">
+                    <td>{{ set.player1_name }}</td>
+                    <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
+                    <td>{{ set.p1_score }}-{{ set.p2_score }}</td>
+                    <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
                 </tr>
-              {% endfor %}
+                {% endfor %}
             </tbody>
           </table>
         {% else %}

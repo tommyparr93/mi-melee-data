@@ -11,8 +11,12 @@ from django.db.models.functions import Lower
 from django.db.models import F, Q, When, Case, Count
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
-from collections import namedtuple
+from collections import namedtuple, defaultdict
 
+SetDisplay = namedtuple('SetDisplay', [
+    'player1_name', 'player2_name', 'player1_score', 'player2_score',
+    'tournament_name', 'tournament_date', 'id', 'p2_id'
+])
 
 def players(request):
     return HttpResponse("Hello world!")
@@ -20,104 +24,82 @@ def players(request):
 
 # i have duplicate code in h2h, combine at some point
 def player_detail_calculations(player, sets):
-    wins = sets.filter(winner_id=player.id).count()
-    losses = sets.exclude(winner_id=player.id).count()
-    wr = (wins / sets.count()) * 100
-    num_tournaments = sets.values('tournament_id').distinct().count()
-    pr_rank = PRSeasonResult.objects.filter(Q(player_id=player.id) & Q(pr_season_id=2)).first()     #FIX THIS AT SOME POINT, HARDCODED PR SEASON
-    if pr_rank:
-        stats = {
-            'wins': wins,
-            'losses': losses,
-            'win_rate': int(wr),
-            'set_count': wins + losses,
-            'tournament_count': num_tournaments,
-            'pr_rank': pr_rank
+    # 'sets' is now a Python list, so we use list comprehensions or loops
+    set_count = len(sets)
+
+    if set_count == 0:
+        return {
+            'wins': 0, 'losses': 0, 'win_rate': 0,
+            'set_count': 0, 'tournament_count': 0
         }
-    else:
-        stats = {
-            'wins': wins,
-            'losses': losses,
-            'win_rate': int(wr),
-            'set_count': wins + losses,
-            'tournament_count': num_tournaments,
-        }
+
+    # Count wins/losses manually in the list
+    wins = sum(1 for s in sets if s.winner_id == player.id)
+    losses = set_count - wins
+    win_rate = (wins / set_count) * 100
+
+    # Get unique tournament IDs from the list
+    num_tournaments = len(set(s.tournament_id for s in sets))
+
+    # Keep your PR rank query as is (since it hits a different model)
+    pr_rank = PRSeasonResult.objects.filter(player_id=player.id, pr_season_id=2).first()
+
+    stats = {
+        'wins': wins,
+        'losses': losses,
+        'win_rate': int(win_rate),
+        'set_count': set_count,
+        'tournament_count': num_tournaments,
+        'pr_rank': pr_rank
+    }
     return stats
 
 
 # need to start accounting for DQs in this model
-def get_head_to_head_results(player, sets):
-    sets = sets.filter(pr_eligible=True)
-    opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
-    opponents.remove(player.id)
+def get_head_to_head_results(player, sets_list):
+    # 1. Filter the list for PR eligible sets (in-memory)
+    sets_list = [s for s in sets_list if s.pr_eligible]
 
-    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
+    # 2. Get unique opponent IDs from the list
+    opponent_ids = set()
+    for s in sets_list:
+        opponent_ids.add(s.player1_id)
+        opponent_ids.add(s.player2_id)
+
+    # Remove the player themselves from the opponent set
+    opponent_ids.discard(player.id)
+
+    # 3. Fetch the actual Player objects for these IDs
+    # This is the ONLY database hit in this function
+    opponents_queryset = Player.objects.filter(id__in=opponent_ids).order_by('name')
 
     opponent_records = []
     for opponent in opponents_queryset:
-        matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
-        wins = 0
-        losses = 0
-        for match in matches:
-            if match.winner_id == player.id:
-                wins += 1
-            else:
-                losses += 1
-        wr = (wins / matches.count()) * 100
-        opponent_record = {
+        # 4. Filter matches for THIS specific opponent from our main list
+        matches = [
+            s for s in sets_list
+            if s.player1_id == opponent.id or s.player2_id == opponent.id
+        ]
+
+        match_count = len(matches)
+        if match_count == 0:
+            continue
+
+        wins = sum(1 for m in matches if m.winner_id == player.id)
+        losses = match_count - wins
+        wr = (wins / match_count) * 100
+
+        opponent_records.append({
             'opponent': opponent,
             'wins': wins,
             'losses': losses,
             'win_rate': int(wr),
-            'count': wins + losses,
+            'count': match_count,
             'pr_notable': opponent.pr_notable
-        }
-        opponent_records.append(opponent_record)
+        })
 
-    opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
-
-    return opponent_records
-
-def get_head_to_head_results2(player, sets):
-    sets = sets.filter(pr_eligible=True)
-    # opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
-    # opponents.remove(player.id)
-    opponents = (
-        Player.objects.filter(
-            Q(id__in=sets.values_list('player1', flat=True)) |
-            Q(id__in=sets.values_list('player2', flat=True)),
-            pr_eligible=True
-        )
-        .exclude(id=player.id)
-        .order_by('name')
-    )
-
-    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
-    opponent_records = []
-    for opponent in opponents_queryset:
-        matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
-        matches = matches.filter(Q(pr_eligible=True), Q(player1=player) | Q(player2=player))
-        wins = 0
-        losses = 0
-        for match in matches:
-            if match.winner_id == player.id:
-                wins += 1
-            else:
-                losses += 1
-
-        opponent_record = {
-            'opponent': opponent.name,
-            'wins': wins,
-            'losses': losses,
-            'win_rate': 0,
-            'count': wins + losses,
-            'pr_notable': opponent.pr_notable
-        }
-        opponent_records.append(opponent_record)
-
-    opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
-
-    return opponent_records
+    # Sort by set count descending
+    return sorted(opponent_records, key=lambda x: x['count'], reverse=True)
 
 
 def put_tournament(request):
@@ -360,7 +342,6 @@ class TournamentListView(generic.ListView):
         return queryset
 
 
-
 # need to refactor have logic on this front to pass primary player and "opponent" within the sets context
 class PlayerDetailView(DetailView):
     model = Player
@@ -369,167 +350,110 @@ class PlayerDetailView(DetailView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.get_object()
-        sets = Set.objects.filter(Q(pr_eligible=True), Q(player1=player) | Q(player2=player)).order_by('-tournament__date')
 
+        # 1. OPTIMIZATION: Fetch all sets with select_related to avoid N+1 queries
+        # We fetch the tournament and players in the initial JOIN
+        base_sets_qs = Set.objects.filter(
+            Q(player1=player) | Q(player2=player)
+        ).select_related('tournament', 'player1', 'player2').order_by('-tournament__date')
 
-        # PR Season Filter
-        pr_seasons = PRSeason.objects.filter(tournament__in=sets.values('tournament')).distinct().order_by('-end_date')
-        context['pr_seasons'] = pr_seasons
+        # 2. Filtering
         pr_season_id = self.request.GET.get('pr_season')
-
-
         if pr_season_id:
-            sets = Set.objects.filter(Q(pr_eligible=True),
-                Q(player1=player) | Q(player2=player),
-                tournament__pr_season_id=pr_season_id
-            ).order_by('-tournament__date')
-        else:
-            sets = Set.objects.filter(
-                Q(player1=player) | Q(player2=player)
-            ).order_by('-tournament__date')
-
-        if pr_season_id:
+            base_sets_qs = base_sets_qs.filter(tournament__pr_season_id=pr_season_id, pr_eligible=True)
             context['pr_season'] = pr_season_id
 
-        # Sets Pagination
-        page_number = self.request.GET.get('page')
-        paginator = Paginator(sets, 50)
-        context['sets'] = paginator.get_page(page_number)
+        # Convert to list to execute once and process in memory
+        all_sets = list(base_sets_qs)
 
+        # 3. PR Seasons dropdown (Efficient distinct lookup)
+        context['pr_seasons'] = PRSeason.objects.all().order_by('-end_date')
 
+        # 4. Process H2H Logic (In-Memory)
+        h2h_data = defaultdict(lambda: {'wins': 0, 'losses': 0, 'opponent_obj': None, 'sets': []})
+
+        for s in all_sets:
+            # Determine who the opponent is relative to our main player
+            if s.player1_id == player.id:
+                opp_obj, opp_id = s.player2, s.player2_id
+                p1_score, p2_score = s.player1_score, s.player2_score
+            else:
+                opp_obj, opp_id = s.player1, s.player1_id
+                p1_score, p2_score = s.player2_score, s.player1_score
+
+            if not opp_id: continue
+
+            h2h_data[opp_id]['opponent_obj'] = opp_obj
+            if s.winner_id == player.id:
+                h2h_data[opp_id]['wins'] += 1
+            else:
+                h2h_data[opp_id]['losses'] += 1
+
+            # Build display object for the expanded row
+            display = SetDisplay(
+                player.name, opp_obj.name, p1_score, p2_score,
+                s.tournament.name, s.tournament.date, s.id, opp_id
+            )
+            h2h_data[opp_id]['sets'].append(display)
+
+        # Convert dict to list for pagination/template
+        h2h_list = []
+        for opp_id, stats in h2h_data.items():
+            total = stats['wins'] + stats['losses']
+            h2h_list.append({
+                'opponent': stats['opponent_obj'],
+                'wins': stats['wins'],
+                'losses': stats['losses'],
+                'win_rate': int((stats['wins'] / total) * 100) if total > 0 else 0,
+                'sets': stats['sets'],
+                'pr_notable': stats['opponent_obj'].pr_notable if stats['opponent_obj'] else False
+            })
+
+        # Sorting logic (Notable players first)
         pr_view = self.request.GET.get('pr_view')
-        # Logic to filter and sort player list
         if pr_view:
-            h2h_list = get_head_to_head_results(player, sets)
-            # Assuming you have a 'pr_notable' field in your Player model
-            h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], (x['opponent'].name or '').lower()),)
-            not_priority = [opponent for opponent in h2h_list if not opponent['pr_notable'] and not opponent['losses'] > 0]
-            h2h_list = [opponent for opponent in h2h_list if opponent['pr_notable'] or opponent['losses'] > 0]
-            h2h_list.extend(not_priority)
+            h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], (x['opponent'].name or '').lower()))
             context['pr_view'] = True
         else:
-            context['pr_view'] = False
-            h2h_list = get_head_to_head_results(player, sets)
+            h2h_list = sorted(h2h_list, key=lambda x: (x['opponent'].name or '').lower())
 
+        # 5. Tournament List Logic (In-Memory)
+        # Group the sets we already fetched by tournament_id
+        tourney_sets = defaultdict(list)
+        for s in all_sets:
+            tourney_sets[s.tournament_id].append(s)
 
-        SetDisplay = namedtuple('SetDisplay',
-                                ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
-                                 'tournament_date', 'id'])
+        # Fetch actual tournament objects for the page
+        tournament_ids = tourney_sets.keys()
+        tournaments = Tournament.objects.filter(id__in=tournament_ids).order_by('-date')
 
-        for opponent_data in h2h_list:
-            opponent = opponent_data['opponent']
-            opponent_sets = Set.objects.filter(Q(pr_eligible=True),
-                (Q(player1=player) & Q(player2=opponent)) |
-                (Q(player2=player) & Q(player1=opponent))
-            )
-            if pr_season_id:
-                opponent_sets = opponent_sets.filter(tournament__pr_season_id=pr_season_id)
-            set_display_list = []
-            for set in opponent_sets:
-                # Determine the ordering of players and their corresponding scores
-                if set.player1 == player:
-                    p1_name = set.player1.name
-                    p2_name = set.player2.name
-                    p1_score = set.player1_score
-                    p2_score = set.player2_score
-                else:
-                    p1_name = set.player2.name
-                    p2_name = set.player1.name
-                    p1_score = set.player2_score
-                    p2_score = set.player1_score
+        # Batch fetch placements to avoid N+1 inside the loop
+        placements = {res.tournament_id: res.placement for res in
+                      TournamentResults.objects.filter(player_id=player.id, tournament_id__in=tournament_ids)}
 
-                # Create a SetDisplay object with the appropriate data and append it to the list
-                set_display = SetDisplay(p1_name, p2_name, p1_score, p2_score, set.tournament.name, set.tournament.date, set.id)
-                set_display_list.append(set_display)
+        for t in tournaments:
+            t.placement = placements.get(t.id, "N/A")
+            # Calculate records using our pre-fetched sets
+            t_sets = tourney_sets[t.id]
+            t_wins = sum(1 for s in t_sets if s.winner_id == player.id)
+            t.record = {'wins': t_wins, 'losses': len(t_sets) - t_wins}
 
-            # Assign the list of SetDisplay objects to opponent_data['sets']
-            set_display_list.reverse()
-            opponent_data['sets'] = set_display_list
-        # H2H Queries
-        context['h2h'] = h2h_list
+            # Map sets to display format for template
+            t.display_sets = []
+            for s in t_sets:
+                p2_name = s.player2.name if s.player1_id == player.id else s.player1.name
+                p2_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                t.display_sets.append({
+                    'player1_name': player.name, 'player2_name': p2_name,
+                    'p1_score': s.player1_score if s.player1_id == player.id else s.player2_score,
+                    'p2_score': s.player2_score if s.player1_id == player.id else s.player1_score,
+                    'id': s.id, 'p2_id': p2_id
+                })
 
-        # H2H Pagination
-
-        opponents_page_number = self.request.GET.get('opponents_page')
-        opponents_paginator = Paginator(context['h2h'], 40)
-        opponents = opponents_paginator.get_page(opponents_page_number)
-        context['opponents'] = opponents
-
-        # player detail calculations
-        context['calculations'] = player_detail_calculations(player, sets)
-
-        tournaments = Tournament.objects.filter(set__in=sets).distinct()
-        if pr_season_id:
-            tournaments = Tournament.objects.filter(set__in=sets, pr_season_id=pr_season_id).distinct().order_by(
-                '-date')
-        else:
-            tournaments = Tournament.objects.filter(set__in=sets).distinct().order_by('-date')
-
-        # Optional: Tournament Pagination
-
-        tournaments_page_number = self.request.GET.get('tournaments_page')
-        tournaments_paginator = Paginator(tournaments, 40)  # Adjust the number per page as necessary
-        paged_tournaments = tournaments_paginator.get_page(tournaments_page_number)
-        context['tournaments'] = paged_tournaments
-
-        for tournament in context['tournaments']:
-            tournament_sets = Set.objects.filter(
-                Q(tournament=tournament),
-                Q(player1=player) | Q(player2=player)
-            )
-            try:
-                placement_obj = TournamentResults.objects.get(Q(tournament=tournament), Q(player_id=player))
-                tournament.placement = placement_obj.placement
-            except TournamentResults.DoesNotExist:
-                tournament.placement = "Placement to be fixed"
-            tournament.record = player_detail_calculations(player, tournament_sets)
-
-            # record now is an attribute of tournament containing the calculation result.
-
-            # ... other code ...
-
-        # Then add this to the context
-        context['tournaments'] = context['tournaments']
-
-        SetDisplay = namedtuple('SetDisplay',
-                                ['player1_name', 'player2_name', 'player1_score', 'player2_score', 'tournament_name',
-                                 'tournament_date', 'id', 'p2_id'])
-
-        for tournament in context['tournaments']:
-            tournament_sets = Set.objects.filter(
-                Q(tournament=tournament),
-                Q(player1=player) | Q(player2=player)
-            )
-            if pr_season_id:
-                tournament_sets = tournament_sets.filter(tournament__pr_season_id=pr_season_id)
-
-            set_display_list = []
-            for set in tournament_sets:
-
-                # Determine the ordering of players and their corresponding scores
-                if set.player1 == player:
-                    p1_name = set.player1.name
-                    p2_name = set.player2.name
-                    p1_score = set.player1_score
-                    p2_score = set.player2_score
-                    p2_id = set.player2.id
-                else:
-                    p1_name = set.player2.name
-                    p2_name = set.player1.name
-                    p1_score = set.player2_score
-                    p2_score = set.player1_score
-                    p2_id = set.player1.id
-
-                # Create a SetDisplay object with the appropriate data and append it to the list
-                set_display = SetDisplay(p1_name, p2_name, p1_score, p2_score, set.tournament.name, set.tournament.date,
-                                         set.id, p2_id)
-                set_display_list.append(set_display)
-
-            # Attach the sets to the tournament object
-            set_display_list.reverse()
-            tournament.sets = set_display_list
-
-
+        # 6. Pagination & Context
+        context['opponents'] = Paginator(h2h_list, 40).get_page(self.request.GET.get('opponents_page'))
+        context['tournaments'] = Paginator(tournaments, 40).get_page(self.request.GET.get('tournaments_page'))
+        context['calculations'] = player_detail_calculations(player, all_sets)
 
         return context
 

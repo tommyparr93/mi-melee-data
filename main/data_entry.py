@@ -139,13 +139,21 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
 
             players_to_create = []
 
-
             for melee_set in sets:
+                # 1. Safely grab the entrant lists
+                ent1 = melee_set.get('entrant1Players', [])
+                ent2 = melee_set.get('entrant2Players', [])
 
-                player1 = melee_set['entrant1Players'][0]['playerId']
-                player2 = melee_set['entrant2Players'][0]['playerId']
-                p1name = (melee_set['entrant1Players'])[0]['playerTag']
-                p2name = (melee_set['entrant2Players'])[0]['playerTag']
+                # 2. Check if both entrants exist. If not, it's a Bye or empty slot.
+                if not ent1 or not ent2:
+                    print(f"Skipping set {melee_set.get('id')} - Missing player (Bye/DQ)")
+                    continue  # Move to the next set in the 'sets' list
+
+                # 3. Now it's safe to use [0]
+                player1 = ent1[0]['playerId']
+                player2 = ent2[0]['playerId']
+                p1name = ent1[0]['playerTag']
+                p2name = ent2[0]['playerTag']
                 # for player in player1, player2:
                 #     if not exists(Player, player):
                 #
