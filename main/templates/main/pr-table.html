@@ -3,69 +3,74 @@
 {% block content %}
 
 <style>
-    /* CSS for sticky header */
-
     .sticky-col {
         position: sticky;
         left: 0;
-        z-index: 2; /* Ensure first column stays above table content */
-        background-color: #f8f9fa !important; /* Set the background color to white or any color you prefer */
-        border-right: 1px solid #dee2e6;
-    }
-    .fixed-column {
-        min-width: 70px; /* Adjust the width value as needed */
-        max-width: 70px; /* Optional: Add max-width for responsive design */
-        white-space: nowrap; /* Optional: Prevent text wrapping */
-        overflow: hidden; /* Optional: Hide overflow content */
-        text-overflow: ellipsis; /* Optional: Show ellipsis for overflow content */
+        z-index: 2;
+        background-color: #f8f9fa !important;
+        border-right: 2px solid #dee2e6;
+        font-weight: bold;
     }
     .sticky-header th {
         position: sticky;
         top: 0;
-        z-index: 1; /* Ensure header stays above table content */
-        background-color: #f8f9fa; /* Background color for header */
+        z-index: 3;
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
     }
-
-     .scroll-container {
-        overflow-x: auto;
-        overflow-y: hidden;
-        max-height: 100vh;
-        background-color: #ffffff;
+    .fixed-column {
+        min-width: 80px;
+        text-align: center;
+        vertical-align: middle !important;
     }
-
+    /* Cell Coloring Logic */
+    .cell-win { background-color: #d4edda !important; } /* Success */
+    .cell-loss { background-color: #f8d7da !important; } /* Danger */
+    .cell-even { background-color: #d1ecf1 !important; } /* Info */
+    .cell-none { color: #ced4da; } /* Gray out unplayed matches */
 </style>
 
-
-<div class="table-responsive" style="overflow-y: auto; max-height: 95vh;">
-<table class="table table-sm table-striped " style="font-size: 14px;">
-    <thead class="sticky-header">
-        <tr>
-            <th></th>  <!-- Empty cell for the corner of the table -->
-            <!-- Header row with player names -->
-            {% for player in players %}
-                <th class="fixed-column"><a href="{% url 'player_detail' pk=player.pk %}">{{ player.name }}</a></th>
-            {% endfor %}
-        </tr>
-    </thead>
-    <tbody>
-        {% for row in table_data %}
+<div class="table-responsive" style="overflow-y: auto; max-height: 92vh;">
+    <table class="table table-sm table-bordered" style="font-size: 13px;">
+        <thead class="sticky-header">
             <tr>
-                <td class="sticky-col"><b><a href="{% url 'player_detail' pk=row.player_obj.pk %}">{{ row.player_name }}</a></b></td>
-                {% for opponent in row.opponents %}
-                <td class=" {% if opponent.losses == '' %}table-dark
-                            {% elif opponent.wins < opponent.losses %}table-danger
-                            {% elif opponent.wins == opponent.losses and opponent.wins > 0 %}table-info
-                            {% elif opponent.wins > opponent.losses %}table-success{% endif %}">
-                   {% if opponent.wins == 'N/A' %}
-                        N/A
-                    {% else %}
-                        {{ opponent.wins }}-{{ opponent.losses }}
-                    {% endif %}
+                <th class="sticky-col">Winner \ Loser</th>
+                {% for player in players %}
+                    <th class="fixed-column">
+                        <a href="{% url 'player_detail' pk=player.pk %}?pr_view=on&pr_season={{ active_pr_season }}">
+                    {{ player.name }}
+                </a>
+                    </th>
                 {% endfor %}
-                </td>
             </tr>
-        {% endfor %}
-    </tbody>
-</table>
-    </div>
+        </thead>
+        <tbody>
+            {% for row in table_data %}
+                <tr>
+                    <td class="sticky-col">
+                        <a href="{% url 'player_detail' pk=row.player_obj.pk %}?pr_view=on&pr_season={{ active_pr_season }}">{{ row.player_name }}</a>
+                    </td>
+                    {% for cell in row.opponents %}
+                        <td class="fixed-column
+                            {% if cell.is_diag %}table-dark
+                            {% elif not cell.played %}cell-none
+                            {% elif cell.wins > cell.losses %}cell-win
+                            {% elif cell.wins < cell.losses %}cell-loss
+                            {% else %}cell-even{% endif %}">
+
+                            {% if cell.is_diag %}
+                                —
+                            {% elif not cell.played %}
+                                0-0
+                            {% else %}
+                                <b>{{ cell.wins }}-{{ cell.losses }}</b>
+                            {% endif %}
+                        </td>
+                    {% endfor %}
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
 {% endblock %}

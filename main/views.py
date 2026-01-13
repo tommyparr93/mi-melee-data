@@ -101,6 +101,46 @@ def get_head_to_head_results(player, sets_list):
     # Sort by set count descending
     return sorted(opponent_records, key=lambda x: x['count'], reverse=True)
 
+def get_head_to_head_results2(player, sets):
+    sets = sets.filter(pr_eligible=True)
+    # opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
+    # opponents.remove(player.id)
+    opponents = (
+        Player.objects.filter(
+            Q(id__in=sets.values_list('player1', flat=True)) |
+            Q(id__in=sets.values_list('player2', flat=True)),
+            pr_eligible=True
+        )
+        .exclude(id=player.id)
+        .order_by('name')
+    )
+
+    opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
+    opponent_records = []
+    for opponent in opponents_queryset:
+        matches = sets.filter(Q(pr_eligible=True), Q(player1=opponent) | Q(player2=opponent))
+        matches = matches.filter(Q(pr_eligible=True), Q(player1=player) | Q(player2=player))
+        wins = 0
+        losses = 0
+        for match in matches:
+            if match.winner_id == player.id:
+                wins += 1
+            else:
+                losses += 1
+
+        opponent_record = {
+            'opponent': opponent.name,
+            'wins': wins,
+            'losses': losses,
+            'win_rate': 0,
+            'count': wins + losses,
+            'pr_notable': opponent.pr_notable
+        }
+        opponent_records.append(opponent_record)
+
+    opponent_records = sorted(opponent_records, key=lambda x: x['count'], reverse=True)
+
+    return opponent_records
 
 def put_tournament(request):
 
@@ -511,40 +551,58 @@ class PrEligiblePlayerListView(PlayerListView):
         return context
 
 
-
 def pr_table(request):
-    # Get all players who are pr_eligible
-    players = Player.objects.filter(pr_eligible=True).order_by(Lower('name'))
-
-    player_names = [player.name for player in players]
+    # 1. Get eligible players and the active season
+    players = list(Player.objects.filter(pr_eligible=True).order_by(Lower('name')))
     active_pr_season = PRSeason.objects.filter(is_active=True).values_list('id', flat=True).first()
-    # Generate the head-to-head results for each player
-    h2h_results = {}
-    for player in players:
-        h2h_results[player.name] = get_head_to_head_results2(player, Set.objects.filter(pr_eligible=True, tournament__pr_season_id=active_pr_season))
 
+    if not active_pr_season:
+        return render(request, 'main/pr-table.html', {'players': [], 'table_data': []})
+
+    # 2. Fetch ALL relevant sets once
+    season_sets = Set.objects.filter(
+        pr_eligible=True,
+        tournament__pr_season_id=active_pr_season,
+        player1__pr_eligible=True,
+        player2__pr_eligible=True
+    ).select_related('player1', 'player2')
+
+    # 3. Build the score map
+    h2h_map = defaultdict(lambda: defaultdict(int))
+    for s in season_sets:
+        winner_id = s.winner_id
+        # Manually identify the loser since the model has no loser_id field
+        loser_id = s.player2_id if s.player1_id == winner_id else s.player1_id
+        h2h_map[winner_id][loser_id] += 1
+
+    # 4. Construct the data grid for the template
     table_data = []
-    for player_y, opponent_results in h2h_results.items():
-        row = {'player_name': player_y, 'opponents': [], 'player_obj': players.get(name=player_y)}
+    for p_y in players:
+        row = {
+            'player_obj': p_y,
+            'player_name': p_y.name,
+            'opponents': []
+        }
 
+        for p_x in players:
+            if p_y.id == p_x.id:
+                cell = {'wins': 'N/A', 'losses': '', 'is_diag': True}
+            else:
+                wins = h2h_map[p_y.id][p_x.id]
+                losses = h2h_map[p_x.id][p_y.id]
+                cell = {
+                    'wins': wins,
+                    'losses': losses,
+                    'is_diag': False,
+                    'played': (wins + losses) > 0
+                }
+            row['opponents'].append(cell)
 
-        opponent_results_sorted = sorted(opponent_results, key=lambda x: x['opponent'].lower())
-        for opponent in opponent_results_sorted:
-            row['opponents'].append(
-                {'name': opponent['opponent'], 'wins': opponent['wins'], 'losses': opponent['losses']})
-
-        row['opponents'].append({'name': player_y, 'wins': "N/A", 'losses': ""})
-        sorted_opponents = sorted(row['opponents'], key=lambda x: x['name'].lower())
-        row['opponents'] = sorted_opponents
         table_data.append(row)
 
     context = {
         'players': players,
-        'h2h_results': h2h_results,
-        'table_data': table_data
+        'table_data': table_data,
+        'active_pr_season': active_pr_season
     }
-
-
-
-
     return render(request, 'main/pr-table.html', context)
