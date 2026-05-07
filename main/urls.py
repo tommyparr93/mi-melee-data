@@ -1,9 +1,10 @@
 from django.urls import path
 from . import views
-from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView
+from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView, HomeView
 
 urlpatterns = [
-    path('', views.PlayerListView.as_view(), name='home'),
+    path('', HomeView.as_view(), name='home'),
+    path('search/', views.GlobalSearchView.as_view(), name='global_search'),
     # path('<int:pk>/', player_detail, name='player_detail'),
     path('player', views.PlayerListView.as_view(), name='players'),
     path('player/<int:pk>/', views.PlayerDetailView.as_view(), name='player_detail'),

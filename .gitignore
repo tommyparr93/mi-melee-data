@@ -7,3 +7,7 @@ __pycache__
 main/migrations/__pycache__/
 */.env.save
 *.py[cod]
+
+# Sandbox and Backups
+.env.sandbox
+backups/

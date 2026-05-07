@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+{% block title %}Melee PR Tracker - Home{% endblock %}
+
+{% block content %}
+<div class="p-5 mb-4 bg-light rounded-3 border">
+    <div class="container-fluid py-5 text-center">
+        <h1 class="display-5 fw-bold">Michigan Melee Stats</h1>
+        <p class="col-md-12 fs-4">Tracking Super Smash Bros. Melee results, head-to-head statistics, and Power Rankings.</p>
+        <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
+            <a href="{% url 'players' %}" class="btn btn-primary btn-lg px-4 gap-3">View Players</a>
+            <a href="{% url 'tournaments' %}" class="btn btn-outline-secondary btn-lg px-4">Browse Tournaments</a>
+        </div>
+        <div class="row justify-content-center mt-5">
+            <div class="col-md-6">
+                <div class="position-relative">
+                    <form action="{% url 'global_search' %}" method="get" class="input-group input-group-lg shadow-sm">
+                        <input type="text" 
+                               name="q" 
+                               class="form-control" 
+                               placeholder="Search players or tournaments..." 
+                               aria-label="Global Search"
+                               hx-get="{% url 'global_search' %}"
+                               hx-trigger="keyup changed delay:300ms"
+                               hx-target="#search-results-dropdown"
+                               autocomplete="off">
+                        <button class="btn btn-dark" type="submit">Search</button>
+                    </form>
+                    <div id="search-results-dropdown" class="position-absolute w-100 shadow-lg bg-white rounded-bottom" style="z-index: 1050; top: 100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 py-5 justify-content-center">
+    <div class="col-md-6">
+        <div class="card h-100 shadow-sm border-info">
+            <div class="card-body text-center">
+                <h2 class="h4">Power Rankings & Data</h2>
+                <p>Check the latest Michigan Power Rankings, eligibility status, and head-to-head records.</p>
+                <div class="d-grid gap-2 d-md-flex justify-content-center">
+                    <a href="{% url 'pr_season_details' 2 %}" class="btn btn-info text-white px-4">Current MI PR</a>
+                    <a href="{% url 'pr_eligible_players' %}" class="btn btn-outline-info px-4">PR Eligibility</a>
+                    <a href="{% url 'pr_table' %}" class="btn btn-outline-dark px-4">H2H Matrix</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-12">
+        <h3 class="mb-4">Recent Tournaments</h3>
+        <div class="table-responsive shadow-sm rounded">
+            <table class="table table-hover align-middle mb-0 bg-white">
+                <thead class="bg-light">
+                    <tr>
+                        <th>Tournament</th>
+                        <th>Date</th>
+                        <th>Location</th>
+                        <th>Entrants</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tournament in recent_tournaments %}
+                    <tr>
+                        <td><strong>{{ tournament.name }}</strong></td>
+                        <td>{{ tournament.date }}</td>
+                        <td>{{ tournament.city|default:"-" }}</td>
+                        <td>{{ tournament.entrant_count }}</td>
+                        <td>
+                            <a href="{% url 'tournament_details' tournament.pk %}" class="btn btn-sm btn-link">View Details</a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="5" class="text-center text-muted py-4">No tournaments found.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        <div class="text-end mt-3">
+            <a href="{% url 'tournaments' %}" class="text-decoration-none">View All Tournaments &rarr;</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

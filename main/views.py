@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import transaction, models
 from django.http import HttpResponse
 from django.core.paginator import Paginator
 from sqlparse.sql import Case
@@ -15,6 +15,47 @@ from collections import namedtuple, defaultdict
 from django.urls import reverse_lazy
 from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch
 from django.db.models.functions import Cast, Lower
+
+class HomeView(generic.TemplateView):
+    template_name = 'main/home.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['total_players'] = Player.objects.count()
+        context['total_tournaments'] = Tournament.objects.count()
+        context['total_sets'] = Set.objects.count()
+        context['recent_tournaments'] = Tournament.objects.order_by('-date')[:5]
+        return context
+
+
+class GlobalSearchView(generic.TemplateView):
+    template_name = 'main/search_results.html'
+
+    def get_template_names(self):
+        if self.request.headers.get('HX-Request'):
+            return ['main/partials/global_search_dropdown.html']
+        return [self.template_name]
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        query = self.request.GET.get('q')
+        if query:
+            # Detect if it's a quick search (HTMX) or a full search page
+            limit = 5 if self.request.headers.get('HX-Request') else 20
+            
+            # Prioritize Michigan (region_code=7) players
+            context['players'] = Player.objects.filter(name__icontains=query).select_related('region_code').annotate(
+                is_michigan=Case(
+                    When(region_code_id=7, then=Value(1)),
+                    default=Value(0),
+                    output_field=models.IntegerField(),
+                )
+            ).order_by('-is_michigan', Lower('name'))[:limit]
+            
+            context['tournaments'] = Tournament.objects.filter(name__icontains=query).order_by('-date')[:limit]
+            context['query'] = query
+        return context
+
 
 SetDisplay = namedtuple('SetDisplay', [
     'player1_name', 'player2_name', 'player1_score', 'player2_score',
@@ -308,6 +349,11 @@ class PlayerListView(generic.ListView):
     paginate_by = 40
     ordering = [Lower('name')]
     queryset = Player.objects.all()
+
+    def get_template_names(self):
+        if self.request.headers.get('HX-Request'):
+            return ['main/partials/player_list_partial.html']
+        return [self.template_name]
 
     def get_queryset(self):
         queryset = super().get_queryset()

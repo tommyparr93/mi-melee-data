@@ -1,0 +1,36 @@
+{% if players or tournaments %}
+    <div class="list-group list-group-flush border border-top-0">
+        {% if players %}
+            <div class="list-group-item bg-light fw-bold py-1 small text-uppercase text-muted" style="font-size: 0.75rem;">Players</div>
+            {% for player in players %}
+                <a href="{% url 'player_detail' player.pk %}" class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center">
+                    <span>{{ player.name }}</span>
+                    <div class="d-flex gap-1">
+                        {% if player.region_code %}
+                            <span class="badge bg-info text-dark border small">{{ player.region_code.name }}</span>
+                        {% endif %}
+                        {% if player.character_main %}
+                            <span class="badge bg-light text-dark border small">{{ player.character_main }}</span>
+                        {% endif %}
+                    </div>
+                </a>
+            {% endfor %}
+        {% endif %}
+        
+        {% if tournaments %}
+            <div class="list-group-item bg-light fw-bold py-1 small text-uppercase text-muted" style="font-size: 0.75rem;">Tournaments</div>
+            {% for tournament in tournaments %}
+                <a href="{% url 'tournament_details' tournament.pk %}" class="list-group-item list-group-item-action py-2">
+                    <div class="d-flex w-100 justify-content-between">
+                        <span class="text-truncate" style="max-width: 80%;">{{ tournament.name }}</span>
+                        <small class="text-muted">{{ tournament.date|date:"Y" }}</small>
+                    </div>
+                </a>
+            {% endfor %}
+        {% endif %}
+    </div>
+{% elif query and query|length > 1 %}
+    <div class="p-3 text-center text-muted border border-top-0">
+        No results for "{{ query }}"
+    </div>
+{% endif %}

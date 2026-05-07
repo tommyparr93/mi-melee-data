@@ -2,50 +2,27 @@
 {% block title %}Player List{% endblock %}
 {% block content %}
   <h1>Players</h1>
-  <table class="table table-light">
-      <form method="get" action="{% url 'players' %}">
-            <input type="text" name="q" placeholder="Search players">
-            <button type="submit">Search</button>
-<!--            <input type="checkbox" id="region-filter" name="region" value="7">-->
-<!--            <label>Search for Michigan</label>-->
+
+  <div class="d-flex justify-content-center mb-4">
+      <form method="get" action="{% url 'players' %}" class="row g-2">
+          <div class="col-auto">
+              <input type="text" 
+                     name="q" 
+                     class="form-control" 
+                     placeholder="Search players" 
+                     value="{{ request.GET.q }}"
+                     hx-get="{% url 'players' %}"
+                     hx-trigger="keyup changed delay:500ms"
+                     hx-target="#player-table-container"
+                     hx-push-url="true">
+          </div>
+          <div class="col-auto">
+              <button type="submit" class="btn btn-primary">Search</button>
+          </div>
       </form>
-    <thead>
-      <tr>
-        <th>Name</th>
-        <th>Character</th>
-        <th>Region</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for player in page_obj %}
-        <tr>
-        <td>
-            <a href="{% url 'player_detail' pk=player.pk %}{% if pr_season %}?pr_view=on?&pr_season={{ pr_season }}{% endif %}">
-                {{ player.name }}
-            </a>
-        </td>
-        <td>{{ player.character_main }}</td>
-        <td>{{ player.region_code }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <div class="pagination">
-    <span class="step-links">
-        {% if page_obj.has_previous %}
-            <a href="?page=1">&laquo; first</a>
-            <a href="?page={{ page_obj.previous_page_number }}">previous</a>
-        {% endif %}
-
-        <span class="current-page">
-            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
-        </span>
-
-        {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}">next</a>
-            <a href="?page={{ page_obj.paginator.num_pages }}">last &raquo;</a>
-        {% endif %}
-    </span>
   </div>
-{% endblock %}
+
+  <div id="player-table-container">
+      {% include 'main/partials/player_list_partial.html' %}
+  </div>
+  {% endblock %}

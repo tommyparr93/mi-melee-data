@@ -15,12 +15,18 @@ import os
 
 # Set environ for key
 env = environ.Env()
-environ.Env.read_env()
-
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+# Load environment variables: .env.sandbox takes priority over .env
+sandbox_env = os.path.join(BASE_DIR, '.env.sandbox')
+default_env = os.path.join(BASE_DIR, '.env')
+
+if os.path.exists(sandbox_env):
+    environ.Env.read_env(sandbox_env)
+else:
+    environ.Env.read_env(default_env)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -140,3 +146,19 @@ SITE_ROOT = os.path.dirname(os.path.realpath(__file__))
 STATICFILES_DIRS = (
   os.path.join(SITE_ROOT, 'static/'),
 )
+
+# Database Backup Settings
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+    "dbbackup": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {
+            "location": os.path.join(BASE_DIR, 'backups'),
+        },
+    },
+}
