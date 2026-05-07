@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>PR Season / Region Management</h2>
+        <div class="btn-group" role="group">
+        <a href="?view=mi" class="btn btn-outline-primary {% if current_view == 'mi' %}active{% endif %}">
+            Michigan
+        </a>
+        <a href="?view=other" class="btn btn-outline-primary {% if current_view == 'other' %}active{% endif %}">
+            Other Regions
+        </a>
+        </div>
+            <button hx-get="{% url 'pr_season_create' %}"
+            hx-target="#modal-container"
+            class="btn btn-success">
+                Add New Season / Regional PR
+            </button>
+<div id="modal-container"></div>
+    </div>
+    <div class="card shadow-sm">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Season Name</th>
+                    <th>Status</th>
+                    <th>Duration</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for season in seasons %}
+                <tr>
+                    <td><strong><a href="{% url 'pr_season_admin_detail' season.pk %}" class="text-decoration-none fw-bold">
+            <i class="fas fa-edit me-1 text-muted"></i> {{ season.name }}
+        </a></strong></td>
+                    <td>
+                        {% if season.is_active %}
+                            <span class="badge bg-primary">Active</span>
+                        {% else %}
+                            <span class="badge bg-secondary">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ season.start_date }} to {{ season.end_date }}</td>
+                    <td class="text-end">
+                        <a href="{% url 'admin:main_prseason_change' season.pk %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

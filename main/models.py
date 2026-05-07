@@ -165,9 +165,11 @@ class Set(models.Model):
 
 class PRSeason(models.Model):
     name = models.CharField(max_length=255)
-    start_date = models.DateField()
-    end_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
+    end_date = models.DateField(null=True, blank=True)
     is_active = models.BooleanField(default=False, null=False)
+    region_code = models.ForeignKey(Region, models.DO_NOTHING, db_column='region_code', blank=True, null=True,
+                                    related_name='seasons')
 
     def __str__(self):
         return self.name

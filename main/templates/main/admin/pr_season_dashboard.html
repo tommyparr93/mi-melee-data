@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row">
+        <div class="col-md-3">
+            <div class="list-group shadow-sm">
+                <div class="list-group-item bg-dark text-white fw-bold">Management Tools</div>
+                <a href="{% url 'pr_season_list' %}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-chevron-left"></i> Back to All Seasons
+                </a>
+                <a href="{% url 'admin:main_prseason_change' season.pk %}" class="list-group-item list-group-item-action">
+                    <i class="fas fa-cog"></i> Open in Django Admin
+                </a>
+                <button class="list-group-item list-group-item-action text-success" 
+                        hx-get="{% url 'add_player_to_season' season.id %}" hx-target="#modal-container">
+                    <i class="fas fa-plus-circle"></i> Add Player to PR
+                </button>
+            </div>
+        </div>
+
+        <div class="col-md-9">
+            <div class="card border-primary shadow">
+                <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0">Editing: {{ season.name }}</h4>
+                    <span class="badge bg-light text-dark">{{ season.region_code.name }}</span>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead class="table-dark">
+                            <tr>
+                                <th class="ps-4" style="width: 100px;">Rank</th>
+                                <th>Player Tag</th>
+                                <th class="text-end pe-4">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pr-list-body">
+                            {% for result in ranked_players %}
+                            <tr>
+                                <td class="ps-4"><input type="number" class="form-control form-control-sm" value="{{ result.rank }}" style="width: 60px;"></td>
+                                <td><strong>{{ result.player.name }}</strong></td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center py-4 text-muted">No players added to this season yet.</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div id="modal-container"></div>
+{% endblock %}

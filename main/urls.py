@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import PrEligiblePlayerListView
+from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView
 
 urlpatterns = [
     path('', views.PlayerListView.as_view(), name='home'),
@@ -11,12 +11,13 @@ urlpatterns = [
     path('tournaments/<int:pk>', views.TournamentDetailView.as_view(), name='tournament_details'),
     path('regions', views.PlayerListView.as_view(), name='regions'),
     path('tournament_form', views.put_tournament, name='tournament_form'),
-    path('pr_form', views.process_pr_csv, name='pr_form'),
-    path('pr_season_form', views.create_pr_season1, name='pr_season_form'),
     path('pr_season/<int:pk>', views.PrSeasonDetailView.as_view(), name='pr_season_details'),
-    path('pr_results_form', views.create_pr_season, name='pr_results_form'),
     path('join_duplicate', views.join_duplicate, name='join_duplicate'),
     path('pr-eligible-players/', PrEligiblePlayerListView.as_view(), name='pr_eligible_players'),
-    path('pr-table/', views.pr_table, name='pr_table')
+    path('pr-table/', views.pr_table, name='pr_table'),
+    path('seasons/', PRSeasonListView.as_view(), name='pr_season_list'),
+    path('seasons/add/', PRSeasonCreateView.as_view(), name='pr_season_create'),
+    path('seasons/manage/<int:pk>/', PRSeasonAdminDetailView.as_view(), name='pr_season_admin_detail'),
+    path('seasons/manage/<int:season_id>/add-player/', views.add_player_to_season, name='add_player_to_season'),
 
 ]

@@ -2,14 +2,17 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.core.paginator import Paginator
 from sqlparse.sql import Case
-
+from django.shortcuts import render, get_object_or_404
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
-from .forms import TournamentForm, PRForm, PRSeasonForm1, PRSeasonForm, PRSeasonResultFormSet, DuplicatePlayer, ConfirmMergeForm
+from .forms import TournamentForm, PRSeasonForm, DuplicatePlayer, ConfirmMergeForm, PRSeasonResultForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.views import generic
+from django.views.generic import ListView, CreateView
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple, defaultdict
+from django.urls import reverse_lazy
 from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch
 from django.db.models.functions import Cast, Lower
 
@@ -17,6 +20,7 @@ SetDisplay = namedtuple('SetDisplay', [
     'player1_name', 'player2_name', 'player1_score', 'player2_score',
     'tournament_name', 'tournament_date', 'id', 'p2_id'
 ])
+
 
 def players(request):
     return HttpResponse("Hello world!")
@@ -101,6 +105,7 @@ def get_head_to_head_results(player, sets_list):
     # Sort by set count descending
     return sorted(opponent_records, key=lambda x: x['count'], reverse=True)
 
+
 def get_head_to_head_results2(player, sets):
     sets = sets.filter(pr_eligible=True)
     # opponents = list(set(list(sets.values_list('player1', flat=True)) + list(sets.values_list('player2', flat=True))))
@@ -111,8 +116,8 @@ def get_head_to_head_results2(player, sets):
             Q(id__in=sets.values_list('player2', flat=True)),
             pr_eligible=True
         )
-        .exclude(id=player.id)
-        .order_by('name')
+            .exclude(id=player.id)
+            .order_by('name')
     )
 
     opponents_queryset = Player.objects.filter(id__in=opponents).order_by('name')
@@ -142,8 +147,8 @@ def get_head_to_head_results2(player, sets):
 
     return opponent_records
 
-def put_tournament(request):
 
+def put_tournament(request):
     if request.method == 'POST':
         form = TournamentForm(request.POST)
         if form.is_valid():
@@ -262,69 +267,39 @@ def get_player_details(main_account, duplicate_account):
         return None
 
 
-def process_pr_csv(request):
+def add_player_to_season(request, season_id):
+    season = get_object_or_404(PRSeason, id=season_id)
+
     if request.method == 'POST':
-        form = PRForm(request.POST, request.FILES)
-        if form.is_valid():
-            csv_file = request.FILES['csvfile']
-            if csv_file.content_type != 'text/csv':
-                return render(request, 'main/pr_form.html',
-                              {'form': form, 'error': 'Invalid file type. Only CSV files are allowed.'})
+        player_name = request.POST.get('player_name')
+        rank = request.POST.get('rank')
 
-        enter_pr_csv(csv_file, form.cleaned_data['pr_season'])
+        # 1. Find the player (handling duplicates by taking the first match)
+        player = Player.objects.filter(name__iexact=player_name).first()
 
-    else:
-        form = PRForm()
+        if player and rank:
+            # 2. Create the result entry
+            PRSeasonResult.objects.create(
+                pr_season=season,
+                player=player,  # Using 'player' as per the Choice error earlier
+                rank=rank
+            )
+            # 3. Success! Tell HTMX to refresh the dashboard
+            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
+        else:
+            # If player not found, you could send an error back,
+            # but for now, let's just refresh to see the state.
+            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
 
-    return render(request, 'main/pr_form.html', {'form': form})
+    # GET logic (Broadened filter for Notable players)
+    players = Player.objects.filter(
+        Q(pr_eligible=True) | Q(pr_notable=True)
+    ).distinct().order_by('name')
 
-
-def create_pr_season(request):
-    if request.method == 'POST':
-        pr_season_form = PRSeasonForm(request.POST)
-        pr_season_result_formset = PRSeasonResultFormSet(request.POST)
-
-        if pr_season_form.is_valid() and pr_season_result_formset.is_valid():
-            pr_season = pr_season_form.cleaned_data['pr_season']
-
-            for pr_result in pr_season_result_formset.cleaned_data:
-                pr_result_create = PRSeasonResult.objects.create(
-                    pr_season_id=pr_season.id,
-                    player=pr_result['player'],
-                    rank=pr_result['rank']
-                ).save()
-
-            # Redirect or do something else
-            return redirect(reverse('pr_season_details', kwargs={'pk': pr_season.id}))
-    else:
-        pr_season_form = PRSeasonForm()
-        pr_season_result_formset = PRSeasonResultFormSet(queryset=PRSeasonResult.objects.none())
-        pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7).order_by(Lower('name'))
-
-    context = {
-        'pr_season_form': pr_season_form,
-        'pr_season_result_formset': pr_season_result_formset,
-    }
-
-    return render(request, 'main/create_pr_season.html', context)
-
-
-def create_pr_season1(request):
-    if request.method == 'POST':
-        form = PRSeasonForm1(request.POST)
-        if form.is_valid():
-            cleaned_date = form.cleaned_data
-            season_name = cleaned_date['season_name']
-            is_active = cleaned_date['is_active']
-            season_start = cleaned_date['season_start']
-            season_end = cleaned_date['season_end']
-
-            return enter_pr_season(season_name, season_start, season_end, is_active)
-
-    else:
-        form = PRSeasonForm1()
-
-    return render(request, 'main/pr_season_form.html', {'form': form})
+    return render(request, 'main/admin/partials/add_player_modal.html', {
+        'season': season,
+        'all_players': players,
+    })
 
 
 class PlayerListView(generic.ListView):
@@ -369,7 +344,6 @@ class TournamentListView(generic.ListView):
         queryset = super().get_queryset()
         query = self.request.GET.get('q')
         pr_season_id = self.request.GET.get('pr_season')
-
 
         if query:
             queryset = super().get_queryset()
@@ -548,7 +522,6 @@ class PrEligiblePlayerListView(PlayerListView):
         queryset = Player.objects.filter(pr_eligible=True).select_related('region_code')
 
         if active_season:
-
             # 2. PREFETCH: Updated with 'set_set' and 'sets_player2_set'
             season_sets = Set.objects.filter(
                 tournament__pr_season=active_season,
@@ -609,6 +582,7 @@ class PrEligiblePlayerListView(PlayerListView):
         context['active_season_name'] = active_season.name if active_season else "No Active Season"
         return context
 
+
 def pr_table(request):
     # 1. Get eligible players and the active season
     players = list(Player.objects.filter(pr_eligible=True).order_by(Lower('name')))
@@ -664,3 +638,63 @@ def pr_table(request):
         'active_pr_season': active_pr_season
     }
     return render(request, 'main/pr-table.html', context)
+
+
+class PRSeasonListView(ListView):
+    model = PRSeason
+    template_name = 'main/pr_season_list.html'
+    context_object_name = 'seasons'
+    ordering = ['-start_date']
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        region_filter = self.request.GET.get('view', 'mi')  # Default to Michigan
+
+        if region_filter == 'mi':
+            # Only Region 7
+            return queryset.filter(region_code_id=7)
+        else:
+            # Everything except Region 7
+            return queryset.exclude(region_code_id=7)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Pass the current view state back to the template
+        context['current_view'] = self.request.GET.get('view', 'mi')
+        return context
+
+
+class PRSeasonCreateView(CreateView):
+    model = PRSeason
+    form_class = PRSeasonForm
+    template_name = 'main/pr_season_form.html'
+    success_url = reverse_lazy('pr_season_list')
+
+    def form_valid(self, form):
+        # First, save the form as usual
+        self.object = form.save()
+
+        # Check if the request came from HTMX
+        if self.request.headers.get('HX-Request'):
+            # Return an empty response with the refresh header
+            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
+
+        # Fallback for non-HTMX requests
+        return super().form_valid(form)
+
+
+class PRSeasonAdminDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailView):
+    model = PRSeason
+    template_name = 'main/admin/pr_season_dashboard.html' # New template path
+    context_object_name = 'season'
+
+    def test_func(self):
+        return self.request.user.is_staff
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        # Fetch results with rank, pre-loading player names for speed
+        context['ranked_players'] = PRSeasonResult.objects.filter(
+            pr_season=self.object
+        ).select_related('player').order_by('rank')
+        return context

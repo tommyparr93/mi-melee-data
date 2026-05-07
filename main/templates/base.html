@@ -10,9 +10,10 @@
       {% bootstrap_javascript %}
     <link rel="icon" type="image/jpeg" href="{% static '/images/mi_melee_icon.jpg' %}">
     <link href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" rel="stylesheet">
-  <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
-  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+      <script src="https://code.jquery.com/jquery-3.3.1.slim.min.js"></script>
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js"></script>
+      <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js"></script>
+      <script src="https://unpkg.com/htmx.org@1.9.10"></script>
   </head>
     <div class="container" style="max-width: 1366px">
   <body>
@@ -45,8 +46,6 @@
 
         <ul class="dropdown-menu">
           <li><a class="dropdown-item" href="{% url 'tournament_form' %}">Tournament Form</a></li>
-          <li><a class="dropdown-item" href="{% url 'pr_results_form' %}">Pr Results Form</a></li>
-          <li><a class="dropdown-item" href="{% url 'pr_form' %}">Pr Results CSV Form</a></li>
           <li><a class="dropdown-item" href="{% url 'join_duplicate' %}">Duplicate Account Tool</a></li>
         </ul>
        {% endif %}

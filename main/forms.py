@@ -19,40 +19,52 @@ class ConfirmMergeForm(forms.Form):
     confirm_merge = forms.BooleanField(required=True, initial=False, help_text="Check to confirm merging accounts.")
 
 
-class PRSeasonForm1(forms.Form):
-    season_name = forms.CharField(required=True)
-    is_active = forms.BooleanField(required=False)
-    season_start = forms.DateTimeField(
-        required=True,
-        input_formats=['%d/%m/%Y'],
-        widget=BootStrapDateTimePickerInput()
+
+#New PR season editor below this line
+
+class PRSeasonForm(forms.ModelForm):
+    class Meta:
+        model = PRSeason
+        fields = ['name', 'start_date', 'end_date', 'is_active', 'region_code']
+        widgets = {
+            'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
+            'name': forms.TextInput(attrs={'class': 'form-control'}),
+            'region_code': forms.Select(attrs={'class': 'form-select'}),
+            'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+        }
+
+class PRSeasonResultForm(forms.ModelForm):
+    # We use a CharField for search, then clean it to find the Player object
+    player_name = forms.CharField(
+        label="Search Player",
+        widget=forms.TextInput(attrs={
+            'list': 'player-datalist',
+            'class': 'form-control',
+            'placeholder': 'Start typing tag...',
+            'autocomplete': 'off'
+        })
     )
-    season_end = forms.DateTimeField(
-        required=True,
-        input_formats=['%d/%m/%Y'],
-        widget=BootStrapDateTimePickerInput()
-    )
 
+    class Meta:
+        model = PRSeasonResult
+        fields = ['rank']
+        widgets = {
+            'rank': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+        }
 
-class PRForm(forms.Form):
-    csvfile = forms.FileField(label='CSV File', required=True)
-    pr_season = forms.ModelChoiceField(queryset=PRSeason.objects.all())
+    def clean_player_name(self):
+        name = self.cleaned_data.get('player_name')
+        # This finds the first player matching the name, regardless of flags
+        player = Player.objects.filter(name__iexact=name).first()
 
+        if not player:
+            raise forms.ValidationError("Player not found in database.")
+        return player
 
-class PRSeasonForm(forms.Form):
-    pr_season = forms.ModelChoiceField(queryset=PRSeason.objects.all())
-
-
-PRSeasonResultFormSet = modelformset_factory(
-    PRSeasonResult,
-    fields=('player', 'rank'),
-    extra=1
-)
-
-# Create the form and formset instances
-pr_season_form = PRSeasonForm()
-pr_season_result_formset = PRSeasonResultFormSet(queryset=PRSeasonResult.objects.none())
-
-# Set the region filter for the player field in the formset
-pr_season_result_formset.form.base_fields['player'].queryset = Player.objects.filter(region_code=7).order_by(Lower('name'))
-
+    def save(self, commit=True):
+        instance = super().save(commit=False)
+        instance.player_id = self.cleaned_data['player_name']
+        if commit:
+            instance.save()
+        return instance

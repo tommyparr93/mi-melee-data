@@ -1,0 +1,1 @@
+{"engine": "django.db.backends.postgresql_psycopg2", "connector": "dbbackup.db.postgresql.PgDumpBinaryConnector"}
