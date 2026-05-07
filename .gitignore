@@ -11,3 +11,4 @@ main/migrations/__pycache__/
 # Sandbox and Backups
 .env.sandbox
 backups/
+GEMINI.md

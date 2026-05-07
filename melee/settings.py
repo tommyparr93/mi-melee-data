@@ -28,6 +28,10 @@ if os.path.exists(sandbox_env):
 else:
     environ.Env.read_env(default_env)
 
+# Application Environment
+ENVIRONMENT_NAME = env('ENVIRONMENT_NAME', default='Production')
+IS_SANDBOX = ENVIRONMENT_NAME.lower() == 'sandbox'
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
