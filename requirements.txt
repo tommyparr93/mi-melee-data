@@ -14,3 +14,4 @@ soupsieve==2.4.1
 sqlparse==0.4.4
 tzdata==2023.3
 urllib3==1.26.15
+django-dbbackup==5.1.1

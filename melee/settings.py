@@ -19,13 +19,16 @@ env = environ.Env()
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load environment variables: .env.sandbox takes priority over .env
+# Load environment variables
+# 1. Try .env.sandbox (Local Dev)
+# 2. Try .env (Production/Standard)
+# 3. Fall back to system environment variables
 sandbox_env = os.path.join(BASE_DIR, '.env.sandbox')
 default_env = os.path.join(BASE_DIR, '.env')
 
 if os.path.exists(sandbox_env):
     environ.Env.read_env(sandbox_env)
-else:
+elif os.path.exists(default_env):
     environ.Env.read_env(default_env)
 
 # Application Environment
@@ -36,9 +39,10 @@ IS_SANDBOX = ENVIRONMENT_NAME.lower() == 'sandbox'
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'test'#env("SECRET_KEY")
-# SECURITY WARtNING: don't run with debug turned on in production!
-DEBUG = True
+SECRET_KEY = env("SECRET_KEY", default='django-insecure-test-key-replace-me')
+
+# SECURITY WARNING: don't run with debug turned on in production!
+DEBUG = env.bool("DEBUG", default=False)
 
 ALLOWED_HOSTS = ['localhost','mimeleestats.com', 'www.mimeleestats.com', '52.15.190.122', '127.0.0.1']
 
