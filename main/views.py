@@ -426,8 +426,8 @@ class PlayerDetailView(DetailView):
         # Convert to list to execute once and process in memory
         all_sets = list(base_sets_qs)
 
-        # 3. PR Seasons dropdown (Efficient distinct lookup)
-        context['pr_seasons'] = PRSeason.objects.all().order_by('-end_date')
+        # 3. PR Seasons dropdown (Filtered to Michigan - ID 7)
+        context['pr_seasons'] = PRSeason.objects.filter(region_code_id=7).order_by('-end_date')
 
         # 4. Process H2H Logic (In-Memory)
         h2h_data = defaultdict(lambda: {'wins': 0, 'losses': 0, 'opponent_obj': None, 'sets': []})

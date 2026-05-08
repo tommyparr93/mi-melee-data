@@ -19,33 +19,71 @@
 }
 
 </style>
-    <div class="stat-container">
-        <h1>{{ player.name }}</h1>
-    <div class="float-right">
-        <form method="get" style="float: right" id="filter-form">
-                        <input type="checkbox" name="pr_view" id="pr_view"  {% if request.GET.pr_view %}checked{% endif %}>
-        <label for="pr_view">PR View</label>
-        <select name="pr_season" id="pr_season">
-        <option value="">All Seasons</option>
-        {% for pr_season in pr_seasons %}
-        <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>
-            {{ pr_season.name }}
-        </option>
-        {% endfor %}
-        </select>
-    </form>
+    <!-- Hero Section -->
+    <div class="card shadow-sm mb-4 border mt-4" style="border-radius: 12px; border-left: 5px solid #0d6efd !important;">
+        <div class="card-body p-4">
+            <div class="row align-items-center">
+                <div class="col-md-8">
+                    <div class="d-flex align-items-center mb-1 flex-wrap">
+                        <h1 class="display-5 fw-bold mb-0 me-3 text-dark">{{ player.name }}</h1>
+                        {% if calculations.pr_rank.rank %}
+                            <span class="badge bg-warning text-dark shadow-sm">#{{ calculations.pr_rank.rank }} in MI</span>
+                        {% endif %}
+                    </div>
+                    
+                    <div class="d-flex flex-wrap gap-2 mb-3 mt-3">
+                        {% if player.region_code %}
+                            <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2">
+                                <i class="bi bi-geo-alt-fill me-1"></i> {{ player.region_code.name }}
+                            </span>
+                        {% endif %}
+                        {% if player.character_main %}
+                            <span class="badge rounded-pill bg-light text-dark border px-3 py-2">
+                                <i class="bi bi-person-fill me-1"></i> {{ player.character_main }} Main
+                            </span>
+                        {% endif %}
+                        {% if player.pr_notable %}
+                            <span class="badge rounded-pill bg-primary px-3 py-2">Notable Player</span>
+                        {% endif %}
+                    </div>
 
-        </div>
+                    {% if player.main_account %}
+                        <div class="mt-2 p-2 bg-light rounded d-inline-block border">
+                            <span class="text-muted small text-uppercase fw-bold">Main account:</span> 
+                            <a href="{% url 'player_detail' player.main_account.id %}" class="ms-1 fw-bold text-decoration-none">{{ player.main_account.name }}</a>
+                        </div>
+                    {% endif %}
+                </div>
 
+                <div class="col-md-4 text-md-end mt-4 mt-md-0">
+                    <div class="d-flex flex-column gap-2 align-items-md-end">
+                        <div class="p-3 rounded border bg-light shadow-sm text-start" style="min-width: 220px;">
+                            <form method="get" id="filter-form">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <label class="small fw-bold text-muted mb-0" for="pr_view" style="font-size: 0.75rem; letter-spacing: 0.5px;">PR VIEW ONLY</label>
+                                    <div class="form-check form-switch mb-0">
+                                        <input class="form-check-input" type="checkbox" name="pr_view" id="pr_view" {% if request.GET.pr_view %}checked{% endif %} style="cursor: pointer; transform: scale(1.1);">
+                                    </div>
+                                </div>
+                                <label class="small text-muted fw-bold mb-1 d-block text-uppercase" style="font-size: 0.7rem;">Select Season</label>
+                                <select name="pr_season" id="pr_season" class="form-select form-select-sm border-0 bg-white">
+                                    <option value="">All Seasons</option>
+                                    {% for pr_season in pr_seasons %}
+                                        <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>
+                                            {{ pr_season.name }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </form>
+                        </div>
+                        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-link btn-sm text-muted text-decoration-none">
+                            <i class="bi bi-pencil-square"></i> Edit Profile
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
-        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-primary" style="float: right;">Edit Player</a>
-    {% if player.main_account %}
-        <h3>Main account: <a href="{% url 'player_detail' player.main_account.id %}">{{ player.main_account.name }}</a></h3>
-    {% endif %}
-    {% if calculations.pr_rank.rank %}
-    <h3><strong>Current MI PR Rank: {{ calculations.pr_rank.rank }}</strong></h3>
-    {% endif %}
-    <p><strong>Region: </strong>{{ player.region_code }}</p>
+    </div>
     <div class="stat-container">
         <p><strong>Tournaments entered:</strong> {{ calculations.tournament_count }}</p>
         <p><strong>Sets played:</strong> {{ calculations.set_count }} </p>
