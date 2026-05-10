@@ -1,7 +1,6 @@
 from django.db import transaction, models
 from django.http import HttpResponse
 from django.core.paginator import Paginator
-from sqlparse.sql import Case
 from django.shortcuts import render, get_object_or_404
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from .forms import TournamentForm, PRSeasonForm, DuplicatePlayer, ConfirmMergeForm, PRSeasonResultForm
@@ -67,37 +66,49 @@ def players(request):
     return HttpResponse("Hello world!")
 
 
-# i have duplicate code in h2h, combine at some point
 def player_detail_calculations(player, sets):
-    # 'sets' is now a Python list, so we use list comprehensions or loops
-    set_count = len(sets)
+    if hasattr(sets, 'aggregate'):
+        # It's a QuerySet, use optimized DB aggregation
+        stats = sets.aggregate(
+            total_sets=Count('id'),
+            wins=Count('id', filter=Q(winner_id=player.id)),
+            num_tournaments=Count('tournament', distinct=True)
+        )
+        set_count = stats['total_sets'] or 0
+        wins = stats['wins'] or 0
+        num_tournaments = stats['num_tournaments'] or 0
+        # For recent form, we need a small slice
+        recent_sets = list(sets.order_by('-tournament__date')[:5])
+    else:
+        # It's a list (pre-fetched data), use Python loops
+        set_count = len(sets)
+        wins = sum(1 for s in sets if s.winner_id == player.id)
+        num_tournaments = len(set(s.tournament_id for s in sets))
+        recent_sets = sets[:5]
 
-    if set_count == 0:
-        return {
-            'wins': 0, 'losses': 0, 'win_rate': 0,
-            'set_count': 0, 'tournament_count': 0
-        }
-
-    # Count wins/losses manually in the list
-    wins = sum(1 for s in sets if s.winner_id == player.id)
     losses = set_count - wins
-    win_rate = (wins / set_count) * 100
+    win_rate = int((wins / set_count) * 100) if set_count > 0 else 0
 
-    # Get unique tournament IDs from the list
-    num_tournaments = len(set(s.tournament_id for s in sets))
-
-    # Keep your PR rank query as is (since it hits a different model)
+    # Keep your PR rank query (hits a different model)
     pr_rank = PRSeasonResult.objects.filter(player_id=player.id, pr_season_id=2).first()
 
-    stats = {
+    recent_form = []
+    for s in recent_sets:
+        if s.winner_id == player.id:
+            recent_form.append('W')
+        else:
+            recent_form.append('L')
+
+    return {
         'wins': wins,
         'losses': losses,
-        'win_rate': int(win_rate),
+        'win_rate': win_rate,
+        'loss_rate': 100 - win_rate,
         'set_count': set_count,
         'tournament_count': num_tournaments,
-        'pr_rank': pr_rank
+        'pr_rank': pr_rank,
+        'recent_form': recent_form
     }
-    return stats
 
 
 # need to start accounting for DQs in this model

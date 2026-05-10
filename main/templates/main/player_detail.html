@@ -84,11 +84,58 @@
             </div>
         </div>
     </div>
-    <div class="stat-container">
-        <p><strong>Tournaments entered:</strong> {{ calculations.tournament_count }}</p>
-        <p><strong>Sets played:</strong> {{ calculations.set_count }} </p>
-        <p> <strong>Set Record:</strong> {{ calculations.wins }}-{{ calculations.losses }}</p>
-        <p><strong>Win Rate:</strong> {{ calculations.win_rate }}%</p>
+    <!-- Stats Overview Cards -->
+    <div class="row g-3 mb-4">
+        <!-- Tournaments Card -->
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                <div class="card-body text-center p-3">
+                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Attendance</div>
+                    <h2 class="display-6 fw-bold mb-0 text-primary">{{ calculations.tournament_count }}</h2>
+                    <div class="small text-muted mt-1">Tournaments</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Set Record Card -->
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                <div class="card-body text-center p-3">
+                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Set Record</div>
+                    <div class="d-flex justify-content-center align-items-baseline">
+                        <h2 class="display-6 fw-bold mb-0 text-success me-2">{{ calculations.wins }}</h2>
+                        <span class="text-muted fw-bold">/</span>
+                        <h2 class="display-6 fw-bold mb-0 text-danger ms-2">{{ calculations.losses }}</h2>
+                    </div>
+                    <div class="progress mt-2" style="height: 4px;">
+                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ calculations.win_rate }}%"></div>
+                        <div class="progress-bar bg-danger" role="progressbar" style="width: {{ calculations.loss_rate }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Win Rate Card -->
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                <div class="card-body text-center p-3">
+                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Efficiency</div>
+                    <h2 class="display-6 fw-bold mb-0 text-dark">{{ calculations.win_rate }}%</h2>
+                    <div class="small text-muted mt-1">Win Rate</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sets Played Card -->
+        <div class="col-md-3">
+            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                <div class="card-body text-center p-3">
+                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Activity</div>
+                    <h2 class="display-6 fw-bold mb-0 text-secondary">{{ calculations.set_count }}</h2>
+                    <div class="small text-muted mt-1">Sets Played</div>
+                </div>
+            </div>
+        </div>
     </div>
     <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('h2hTable')" style="width: 33%;">Head to Head</a>
     <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('tournamentsTable')" style="width: 33%;">Tournaments</a>
