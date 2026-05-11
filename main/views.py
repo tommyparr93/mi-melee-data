@@ -418,6 +418,14 @@ class PlayerDetailView(DetailView):
     model = Player
     template_name = 'main/player_detail.html'
 
+    def get_template_names(self):
+        if self.request.headers.get('HX-Request'):
+            tab = self.request.GET.get('tab', 'h2h')
+            if tab == 'tournaments':
+                return ['main/partials/player_tournaments_partial.html']
+            return ['main/partials/player_h2h_partial.html']
+        return [self.template_name]
+
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         player = self.get_object()

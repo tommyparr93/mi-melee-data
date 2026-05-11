@@ -1,0 +1,85 @@
+<h2>Tournaments</h2>
+<table class="table table-light">
+    <thead>
+      <tr>
+          <th style="white-space: nowrap; width: 1%;">See Details</th>
+        <th>Tournament Name</th>
+          <th>Record</th>
+          <th>Placement</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+{% for tournament in tournaments %}
+  <tr class="{% if tournament.placement == 1 %}fw-bold{% endif %}">
+    <td>
+      <button class="btn btn-sm btn-outline-primary" data-toggle="collapse" data-target="#collapse-{{ tournament.id }}" aria-expanded="false" aria-controls="collapse-{{ tournament.id }}">+</button>
+    </td>
+    <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
+      <td>{{ tournament.record.wins }} - {{tournament.record.losses }}</td>
+      <td>{{ tournament.placement }} / {{tournament.entrant_count}}</td>
+    <td>{{ tournament.date }}</td>
+  </tr>
+<tr class="zeroPadding">
+  <td class="zeroPadding" colspan="6">
+    <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
+      {% if tournament.display_sets %}
+        <table class="table table-light mb-0">
+          <thead>
+            <tr>
+              <th>Player 1</th>
+              <th>Player 2</th>
+              <th>Results</th>
+              <th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+              {% for set in tournament.display_sets %}
+              <tr class="{% if set.p1_score > set.p2_score %}table-success{% else %}table-danger{% endif %}">
+                  <td>{{ set.player1_name }}</td>
+                  <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
+                  <td>{{ set.p1_score }}-{{ set.p2_score }}</td>
+                  <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+              </tr>
+              {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="p-3 mb-0">No sets found</p>
+      {% endif %}
+    </div>
+  </td>
+</tr>
+{% empty %}
+<tr>
+  <td colspan="5" class="text-center p-4 text-muted">No tournaments found for this period</td>
+</tr>
+{% endfor %}
+    </tbody>
+</table>
+
+{% if tournaments.paginator.num_pages > 1 %}
+<nav class="mt-3">
+    <ul class="pagination pagination-sm justify-content-center">
+        {% if tournaments.has_previous %}
+            <li class="page-item">
+                <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?tournaments_page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=tournaments" hx-target="#table-content">« first</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?tournaments_page={{ tournaments.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=tournaments" hx-target="#table-content">previous</a>
+            </li>
+        {% endif %}
+
+        <li class="page-item disabled"><span class="page-link text-dark">Page {{ tournaments.number }} of {{ tournaments.paginator.num_pages }}</span></li>
+
+        {% if tournaments.has_next %}
+            <li class="page-item">
+                <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?tournaments_page={{ tournaments.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=tournaments" hx-target="#table-content">next</a>
+            </li>
+            <li class="page-item">
+                <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?tournaments_page={{ tournaments.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=tournaments" hx-target="#table-content">last »</a>
+            </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

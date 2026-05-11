@@ -58,7 +58,12 @@
                 <div class="col-md-4 text-md-end mt-4 mt-md-0">
                     <div class="d-flex flex-column gap-2 align-items-md-end">
                         <div class="p-3 rounded border bg-light shadow-sm text-start" style="min-width: 220px;">
-                            <form method="get" id="filter-form">
+                            <form method="get" id="filter-form" 
+                                  hx-get="{% url 'player_detail' player.id %}" 
+                                  hx-target="#dashboard-content" 
+                                  hx-select="#dashboard-content"
+                                  hx-trigger="change from:select, change from:input[type='checkbox']"
+                                  hx-push-url="true">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label class="small fw-bold text-muted mb-0" for="pr_view" style="font-size: 0.75rem; letter-spacing: 0.5px;">PR VIEW ONLY</label>
                                     <div class="form-check form-switch mb-0">
@@ -74,6 +79,8 @@
                                         </option>
                                     {% endfor %}
                                 </select>
+                                <!-- Preserve current tab when filtering -->
+                                <input type="hidden" name="tab" id="current-tab-input" value="{{ request.GET.tab|default:'h2h' }}">
                             </form>
                         </div>
                         <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-link btn-sm text-muted text-decoration-none">
@@ -84,282 +91,114 @@
             </div>
         </div>
     </div>
-    <!-- Stats Overview Cards -->
-    <div class="row g-3 mb-4">
-        <!-- Tournaments Card -->
-        <div class="col-md-3">
-            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
-                <div class="card-body text-center p-3">
-                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Attendance</div>
-                    <h2 class="display-6 fw-bold mb-0 text-primary">{{ calculations.tournament_count }}</h2>
-                    <div class="small text-muted mt-1">Tournaments</div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- Set Record Card -->
-        <div class="col-md-3">
-            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
-                <div class="card-body text-center p-3">
-                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Set Record</div>
-                    <div class="d-flex justify-content-center align-items-baseline">
-                        <h2 class="display-6 fw-bold mb-0 text-success me-2">{{ calculations.wins }}</h2>
-                        <span class="text-muted fw-bold">/</span>
-                        <h2 class="display-6 fw-bold mb-0 text-danger ms-2">{{ calculations.losses }}</h2>
-                    </div>
-                    <div class="progress mt-2" style="height: 4px;">
-                        <div class="progress-bar bg-success" role="progressbar" style="width: {{ calculations.win_rate }}%"></div>
-                        <div class="progress-bar bg-danger" role="progressbar" style="width: {{ calculations.loss_rate }}%"></div>
+
+    <div id="dashboard-content">
+        <!-- Stats Overview Cards -->
+        <div class="row g-3 mb-4">
+            <!-- Tournaments Card -->
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                    <div class="card-body text-center p-3">
+                        <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Attendance</div>
+                        <h2 class="display-6 fw-bold mb-0 text-primary">{{ calculations.tournament_count }}</h2>
+                        <div class="small text-muted mt-1">Tournaments</div>
                     </div>
                 </div>
             </div>
-        </div>
+            
+            <!-- Set Record Card -->
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                    <div class="card-body text-center p-3">
+                        <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Set Record</div>
+                        <div class="d-flex justify-content-center align-items-baseline">
+                            <h2 class="display-6 fw-bold mb-0 text-success me-2">{{ calculations.wins }}</h2>
+                            <span class="text-muted fw-bold">/</span>
+                            <h2 class="display-6 fw-bold mb-0 text-danger ms-2">{{ calculations.losses }}</h2>
+                        </div>
+                        <div class="progress mt-2" style="height: 4px;">
+                            <div class="progress-bar bg-success" role="progressbar" style="width: {{ calculations.win_rate }}%"></div>
+                            <div class="progress-bar bg-danger" role="progressbar" style="width: {{ calculations.loss_rate }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Win Rate Card -->
-        <div class="col-md-3">
-            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
-                <div class="card-body text-center p-3">
-                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Efficiency</div>
-                    <h2 class="display-6 fw-bold mb-0 text-dark">{{ calculations.win_rate }}%</h2>
-                    <div class="small text-muted mt-1">Win Rate</div>
+            <!-- Win Rate Card -->
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                    <div class="card-body text-center p-3">
+                        <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Efficiency</div>
+                        <h2 class="display-6 fw-bold mb-0 text-dark">{{ calculations.win_rate }}%</h2>
+                        <div class="small text-muted mt-1">Win Rate</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sets Played Card -->
+            <div class="col-md-3">
+                <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
+                    <div class="card-body text-center p-3">
+                        <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Activity</div>
+                        <h2 class="display-6 fw-bold mb-0 text-secondary">{{ calculations.set_count }}</h2>
+                        <div class="small text-muted mt-1">Sets Played</div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <!-- Sets Played Card -->
-        <div class="col-md-3">
-            <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
-                <div class="card-body text-center p-3">
-                    <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Activity</div>
-                    <h2 class="display-6 fw-bold mb-0 text-secondary">{{ calculations.set_count }}</h2>
-                    <div class="small text-muted mt-1">Sets Played</div>
-                </div>
-            </div>
+        <!-- Navigation Tabs (HTMX) -->
+        <div class="d-flex gap-2 mb-3">
+            <button hx-get="{% url 'player_detail' player.id %}?tab=h2h&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}" 
+                    hx-target="#table-content" 
+                    hx-push-url="true"
+                    class="btn btn-outline-primary btn-lg flex-grow-1 shadow-sm tab-btn {% if not request.GET.tab or request.GET.tab == 'h2h' %}active btn-primary text-white{% endif %}" 
+                    id="btn-h2h">
+                Head to Head
+            </button>
+            <button hx-get="{% url 'player_detail' player.id %}?tab=tournaments&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}" 
+                    hx-target="#table-content" 
+                    hx-push-url="true"
+                    class="btn btn-outline-primary btn-lg flex-grow-1 shadow-sm tab-btn {% if request.GET.tab == 'tournaments' %}active btn-primary text-white{% endif %}" 
+                    id="btn-tournaments">
+                Tournaments
+            </button>
         </div>
-    </div>
-    <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('h2hTable')" style="width: 33%;">Head to Head</a>
-    <a href="#" class="btn btn-primary btn-lg active" onclick="showTable('tournamentsTable')" style="width: 33%;">Tournaments</a>
-    <div id="h2hTable" class="table-container">
-    <h2>H2H</h2>
-    <form method="get">
-        </form>
-      <table class="table table-light">
-        <thead>
-          <tr>
-              <th style="white-space: nowrap; width: 1%;">See Details</th>
-            <th>Opponent</th>
-            <th>Wins</th>
-            <th>Losses</th>
-            <th>W/R</th>
-          </tr>
-        </thead>
-      <tbody>
 
-      {% for opponent in opponents %}
-
-      <tr>
-            <td>
-        <button data-toggle="collapse" data-target="#collapse-{{ opponent.opponent.id }}" aria-expanded="false" aria-controls="collapse-{{ opponent.opponent.id }}">+</button>
-          </td>
-        <td>
-          <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
-            {% if pr_view and opponent.opponent.pr_notable %}
-              <strong>{{ opponent.opponent.name }}</strong>
+        <!-- Dynamic Content Area -->
+        <div id="table-content" class="position-relative min-vh-50">
+            {% if request.GET.tab == 'tournaments' %}
+                {% include 'main/partials/player_tournaments_partial.html' %}
             {% else %}
-              {{ opponent.opponent.name }}
+                {% include 'main/partials/player_h2h_partial.html' %}
             {% endif %}
-          </a>
-
-
-        </td>
-        <td> {{opponent.wins }} </td>
-        <td> {{opponent.losses }} </td>
-        <td> {{opponent.win_rate }}% </td>
-      </tr>
-    <tr class="zeroPadding" id="h2h-expanded">
-      <td class="zeroPadding" colspan="5">
-        <div id="collapse-{{ opponent.opponent.id }}" class="collapse" style="margin: 0;">
-        {% if opponent.sets %}
-        <table class="table table-light">
-          <thead>
-            <tr>
-              <th>Player</th>
-              <th>Opponent</th>
-              <th>Results</th>
-              <th>Tournament</th>
-              <th>Date</th>
-                <th>Admin</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for set in opponent.sets %}
-                <tr class="{% if set.player1_score > set.player2_score %}table-success{% else %}table-danger{% endif %}">
-                    <td>{{ set.player1_name }}</td>
-                    <td>{{ set.player2_name }}</td>
-                    <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
-                    <td>{{ set.tournament_name }}</td>
-                    <td>{{ set.tournament_date|date:"M d, Y" }}</td>
-                    <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
-                </tr>
-                {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p>No sets found</p>
-      {% endif %}
-
         </div>
-      </td>
-    </tr>
-      {% empty %}
-        <tr>
-          <td colspan="5">No tournaments found</td>
-        </tr>
-      {% endfor %}
-      </tbody>
-      </table>
-    <div class="pagination">
-    <span class="step-links">
-        {% if opponents.has_previous %}
-            <a href="?opponents_page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">« first</a>
-            <a href="?opponents_page={{ opponents.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">previous</a>
-        {% endif %}
-
-        <span class="current-page">
-            Page {{ opponents.number }} of {{ opponents.paginator.num_pages }}.
-        </span>
-        {% if opponents.has_next %}
-            <a href="?opponents_page={{ opponents.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">next</a>
-            <a href="?opponents_page={{ opponents.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">last »</a>
-        {% endif %}
-    </span>
     </div>
-
-</div>
-
-<div id="tournamentsTable" class="table-container" style="display: none;">
-   <!-- Tournaments Table here -->
-    <h2>Tournaments</h2>
-    <table class="table table-light">
-        <thead>
-          <tr>
-              <th style="white-space: nowrap; width: 1%;">See Details</th>
-            <th>Tournament Name</th>
-              <th>Record</th>
-              <th>Placement</th>
-            <th>Date</th>
-          </tr>
-        </thead>
-        <tbody>
-{% for tournament in tournaments %}
-
-    {% if tournament.placement == 1 %}
-  <tr style="font-weight: bold">
-
-      {% else %}
-      <tr>
-      {% endif %}
-    <td>
-      <button data-toggle="collapse" data-target="#collapse-{{ tournament.id }}" aria-expanded="false" aria-controls="collapse-{{ tournament.id }}">+</button>
-    </td>
-    <td><a href="{% url 'tournament_details' tournament.id %}">{{ tournament.name }}</a></td>
-      <td>{{ tournament.record.wins }} - {{tournament.record.losses }}</td>
-      <td>{{ tournament.placement }} / {{tournament.entrant_count}}</td>
-    <td>{{ tournament.date }}</td>
-  </tr>
-<tr class="zeroPadding">
-  <td class="zeroPadding" colspan="6">
-    <div id="collapse-{{ tournament.id }}" class="collapse" style="margin: 0;">
-      {% if tournament.display_sets %}
-        <table class="table table-light">
-          <thead>
-            <tr>
-              <th>Player 1</th>
-              <th>Player 2</th>
-              <th>Results</th>
-              <th>Admin</th>
-            </tr>
-          </thead>
-          <tbody>
-              {% for set in tournament.display_sets %}
-              <tr class="{% if set.p1_score > set.p2_score %}table-success{% else %}table-danger{% endif %}">
-                  <td>{{ set.player1_name }}</td>
-                  <td><a href="{% url 'player_detail' set.p2_id %}">{{ set.player2_name }}</a></td>
-                  <td>{{ set.p1_score }}-{{ set.p2_score }}</td>
-                  <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
-              </tr>
-              {% endfor %}
-          </tbody>
-        </table>
-      {% else %}
-        <p>No sets found</p>
-      {% endif %}
-    </div>
-  </td>
-</tr>
-{% endfor %}
-        </tbody>
-    </table>
-    <div class="pagination">
-        <span class="step-links">
-            {% if tournaments.has_previous %}
-                <a href="?tournaments_page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">« first</a>
-                <a href="?tournaments_page={{ tournaments.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">previous</a>
-            {% endif %}
-
-            <span class="current-page">
-                Page {{ tournaments.number }} of {{ tournaments.paginator.num_pages }}.
-            </span>
-            {% if tournaments.has_next %}
-                <a href="?tournaments_page={{ tournaments.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">next</a>
-                <a href="?tournaments_page={{ tournaments.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">last »</a>
-            {% endif %}
-        </span>
-    </div>
-</div>
 </div>
 
 <script type="text/javascript">
-    document.getElementById('pr_view').addEventListener('change', function() {
-        this.form.submit();
+    // Handle tab active state styling and tab persistence in filter form
+    document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+        if (evt.detail.target.id === 'table-content' || evt.detail.target.id === 'dashboard-content') {
+            const urlParams = new URLSearchParams(window.location.search);
+            const tab = urlParams.get('tab') || 'h2h';
+            
+            // Update the hidden input in the filter form to persist tab state
+            const tabInput = document.getElementById('current-tab-input');
+            if (tabInput) tabInput.value = tab;
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('btn-primary', 'text-white', 'active');
+                btn.classList.add('btn-outline-primary');
+            });
+
+            const activeBtn = document.getElementById('btn-' + tab);
+            if (activeBtn) {
+                activeBtn.classList.remove('btn-outline-primary');
+                activeBtn.classList.add('btn-primary', 'text-white', 'active');
+            }
+        }
     });
-    document.getElementById('pr_season').addEventListener('change', function() {
-        this.form.submit();
-    });
-</script>
-
-<script type="text/javascript">
-    document.getElementById('pr_season').addEventListener('change', function() {
-        this.form.submit();
-    });
-</script>
-
-<script>
-function showTable(tableId) {
-   // Hide all tables first
-   document.getElementById('h2hTable').style.display = 'none';
-   document.getElementById('tournamentsTable').style.display = 'none';
-
-   // Then show the selected table
-   document.getElementById(tableId).style.display = 'block';
-
-   // Store the current active table
-   sessionStorage.setItem('activeTable', tableId);
-}
-document.addEventListener('DOMContentLoaded', (event) => {
-   const activeTable = sessionStorage.getItem('activeTable') || 'h2hTable';
-   showTable(activeTable);
-});
-
-
-$('.collapse').on('show.bs.collapse', function() {
-  $(this).parent().removeClass("zeroPadding");
-});
-
-$('.collapse').on('hide.bs.collapse', function() {
-  $(this).parent().addClass("zeroPadding");
-});
-</script>
 </script>
 
 

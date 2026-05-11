@@ -1,0 +1,97 @@
+<h2>H2H</h2>
+<table class="table table-light">
+  <thead>
+    <tr>
+      <th style="white-space: nowrap; width: 1%;">See Details</th>
+      <th>Opponent</th>
+      <th>Wins</th>
+      <th>Losses</th>
+      <th>W/R</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for opponent in opponents %}
+    <tr>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" data-toggle="collapse" data-target="#collapse-{{ opponent.opponent.id }}" aria-expanded="false" aria-controls="collapse-{{ opponent.opponent.id }}">+</button>
+      </td>
+      <td>
+        <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
+          {% if pr_view and opponent.opponent.pr_notable %}
+            <strong>{{ opponent.opponent.name }}</strong>
+          {% else %}
+            {{ opponent.opponent.name }}
+          {% endif %}
+        </a>
+      </td>
+      <td> {{opponent.wins }} </td>
+      <td> {{opponent.losses }} </td>
+      <td> {{opponent.win_rate }}% </td>
+    </tr>
+    <tr class="zeroPadding" id="h2h-expanded">
+      <td class="zeroPadding" colspan="5">
+        <div id="collapse-{{ opponent.opponent.id }}" class="collapse" style="margin: 0;">
+        {% if opponent.sets %}
+        <table class="table table-light mb-0">
+          <thead>
+            <tr>
+              <th>Player</th>
+              <th>Opponent</th>
+              <th>Results</th>
+              <th>Tournament</th>
+              <th>Date</th>
+              <th>Admin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for set in opponent.sets %}
+                <tr class="{% if set.player1_score > set.player2_score %}table-success{% else %}table-danger{% endif %}">
+                    <td>{{ set.player1_name }}</td>
+                    <td>{{ set.player2_name }}</td>
+                    <td>{{ set.player1_score }}-{{ set.player2_score }}</td>
+                    <td>{{ set.tournament_name }}</td>
+                    <td>{{ set.tournament_date|date:"M d, Y" }}</td>
+                    <td><a href="{% url 'admin:main_set_change' set.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>
+                </tr>
+                {% endfor %}
+          </tbody>
+        </table>
+      {% else %}
+        <p class="p-3 mb-0">No sets found</p>
+      {% endif %}
+        </div>
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="5" class="text-center p-4 text-muted">No matches found for this period</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if opponents.paginator.num_pages > 1 %}
+<nav class="mt-3">
+  <ul class="pagination pagination-sm justify-content-center">
+    {% if opponents.has_previous %}
+      <li class="page-item">
+        <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?opponents_page=1&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=h2h" hx-target="#table-content">« first</a>
+      </li>
+      <li class="page-item">
+        <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?opponents_page={{ opponents.previous_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=h2h" hx-target="#table-content">previous</a>
+      </li>
+    {% endif %}
+
+    <li class="page-item disabled"><span class="page-link text-dark">Page {{ opponents.number }} of {{ opponents.paginator.num_pages }}</span></li>
+
+    {% if opponents.has_next %}
+      <li class="page-item">
+        <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?opponents_page={{ opponents.next_page_number }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=h2h" hx-target="#table-content">next</a>
+      </li>
+      <li class="page-item">
+        <a class="page-link" href="#" hx-get="{% url 'player_detail' player.id %}?opponents_page={{ opponents.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}&tab=h2h" hx-target="#table-content">last »</a>
+      </li>
+    {% endif %}
+  </ul>
+</nav>
+{% endif %}
