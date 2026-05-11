@@ -420,6 +420,10 @@ class PlayerDetailView(DetailView):
 
     def get_template_names(self):
         if self.request.headers.get('HX-Request'):
+            target = self.request.headers.get('HX-Target')
+            if target == 'dashboard-content':
+                return ['main/partials/player_dashboard_inner.html']
+            
             tab = self.request.GET.get('tab', 'h2h')
             if tab == 'tournaments':
                 return ['main/partials/player_tournaments_partial.html']
