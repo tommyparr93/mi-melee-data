@@ -126,7 +126,8 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                 date=t_date,
                 city=t_city,
                 entrant_count=t_entrants,
-                pr_season=None if not pr_season else pr_season
+                pr_season=None if not pr_season else pr_season,
+                slug=tournament_slug
             ).save()
 
             i = 1
@@ -177,8 +178,16 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                     )
                     player_list.append(player2)
 
-                p1score = melee_set['entrant1Score']
-                p2score = melee_set['entrant2Score']
+                p1score_raw = melee_set.get('entrant1Score')
+                p2score_raw = melee_set.get('entrant2Score')
+
+                # Handle missing scores (DQs/Unplayed) safely by treating them as -1
+                p1score = p1score_raw if p1score_raw is not None else -1
+                p2score = p2score_raw if p2score_raw is not None else -1
+
+                # If either score is -1, the set is not PR eligible
+                is_set_eligible = is_pr_eligible and (p1score != -1 and p2score != -1)
+
 
                 if p1score > p2score:
                     winner = player1
@@ -200,30 +209,25 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True):
                         tournament_id=event_id,
                         location=melee_set['fullRoundText'],
                         played=playedBool,
-                        pr_eligible=is_pr_eligible
+                        pr_eligible=is_set_eligible
                     ))
         Set.objects.bulk_create(sets_to_create, ignore_conflicts=True)
         print("finished sets")
-        tournament_results_list = TournamentResults.objects.all() or []
-        print("got results 1")
-        # tournament_results_list = [(tr.tournament, tr.player_id) for tr in tournament_results_list]
         print("starting tournament results")
-        conn = psycopg2.connect(dbname=dbName, user=dbUser, password=dbPassword, host=dbHost, port=dbPort)
-        cur = conn.cursor()
+        
+        from django.db import connection
 
         results = smash.tournament_show_lightweight_results(tournament_slug, event_name, 1)
         print(f'results: {results}')
-        for result in results:
-            player_id = result['playerid']
-            placement = result['placement']
+        
+        with connection.cursor() as cur:
+            for result in results:
+                player_id = result['playerid']
+                placement = result['placement']
 
-            # if (event_id, player_id) not in tournament_results_list:
-            sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s)'
-            query_parameters = (event_id, player_id, placement)
-            cur.execute(sql_query, query_parameters)
-            conn.commit()
-
-        conn.close()
+                sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING'
+                query_parameters = (event_id, player_id, placement)
+                cur.execute(sql_query, query_parameters)
 
 
         """
