@@ -8,6 +8,12 @@ from .widgets import BootStrapDateTimePickerInput
 class TournamentForm(forms.Form):
     tournament_url = forms.CharField(required=True)
     is_pr_eligible = forms.BooleanField(required=False, initial=True)
+    run_in_background = forms.BooleanField(
+        required=False, 
+        initial=False, 
+        label="Large Tournament (Run in background)",
+        help_text="Check this for huge tournaments (like the Arcadian) to prevent server timeouts."
+    )
 
 
 class DuplicatePlayer(forms.Form):

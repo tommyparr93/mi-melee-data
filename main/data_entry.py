@@ -147,7 +147,8 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
         ent1 = melee_set.get('entrant1Players', [])
         ent2 = melee_set.get('entrant2Players', [])
 
-        if not ent1 or not ent2:
+        # Start.gg sometimes returns [None] for deleted players or deep DQs
+        if not ent1 or not ent2 or ent1[0] is None or ent2[0] is None:
             continue
 
         if not str(melee_set.get('id', '')).isdigit():
@@ -235,4 +236,21 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
                 cur.execute(sql_query, query_parameters)
 
     return redirect(reverse('tournament_details', kwargs={'pk': event_id}))
+
+
+def enter_tournament_async(tournament_url: str, is_pr_eligible: bool = True):
+    from django.db import connection
+    try:
+        enter_tournament(tournament_url, is_pr_eligible=is_pr_eligible)
+        print(f"Background ingestion completed successfully for {tournament_url}")
+    except Exception as e:
+        from .models import SyncErrorLog
+        print(f"Background ingestion failed: {e}")
+        SyncErrorLog.objects.create(
+            tournament_name="Manual Entry",
+            tournament_url=tournament_url,
+            error_message=f"Async Error: {str(e)}"
+        )
+    finally:
+        connection.close()
 
