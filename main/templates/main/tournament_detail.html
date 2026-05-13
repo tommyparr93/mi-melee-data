@@ -2,6 +2,9 @@
 {% block title %}Tournament Details{% endblock %}
 {% block content %}
   <h1>{{ tournament.name }}</h1>
+  {% if tournament.slug %}
+  <p><a href="https://www.start.gg/tournament/{{ tournament.slug }}" target="_blank" class="btn btn-sm btn-outline-info">View on Start.gg</a></p>
+  {% endif %}
         <form method="get" id="filter-form">
                         <input type="checkbox" name="michigan_view" id="michigan_view"  {% if request.GET.michigan_view %}checked{% endif %}>
         <label for="michigan_view">Michigan View</label>

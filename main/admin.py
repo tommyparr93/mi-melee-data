@@ -1,12 +1,20 @@
 from django.contrib import admin, messages
 
 
-from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult
+from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult, SyncErrorLog
 
 # 1. Register simple models as before
 admin.site.register(Region)
 admin.site.register(PRSeason)
 admin.site.register(Tournament)
+
+@admin.register(SyncErrorLog)
+class SyncErrorLogAdmin(admin.ModelAdmin):
+    list_display = ('timestamp', 'tournament_name', 'tournament_url', 'is_resolved')
+    list_filter = ('is_resolved',)
+    search_fields = ('tournament_name', 'tournament_slug', 'error_message')
+    readonly_fields = ('timestamp',)
+
 
 # 2. Optimized PlayerAdmin
 class PlayerAdmin(admin.ModelAdmin):
