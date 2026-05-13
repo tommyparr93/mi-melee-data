@@ -1,0 +1,180 @@
+<!-- Filters -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="row align-items-center g-2">
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">Year (top events)</label>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_general' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-filter]"
+                        name="year" data-filter>
+                    <option value="all" {% if not selected_year %}selected{% endif %}>All time</option>
+                    {% for y in available_years %}
+                        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Stat Cards -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #0d6efd !important;">
+            <div class="card-body text-center p-4">
+                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Longest Win Streak Ever</div>
+                {% if top_streak %}
+                    <h2 class="display-6 fw-bold text-primary mb-1">{{ top_streak.streak }}</h2>
+                    <div class="small">
+                        <a href="{% url 'player_detail' top_streak.player.id %}" class="text-decoration-none fw-bold">{{ top_streak.player.name }}</a>
+                    </div>
+                {% else %}
+                    <span class="text-muted">No data</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #198754 !important;">
+            <div class="card-body text-center p-4">
+                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Most Sets Played All-Time</div>
+                {% if most_sets_player %}
+                    <h2 class="display-6 fw-bold text-success mb-1">{{ most_sets_count }}</h2>
+                    <div class="small">
+                        <a href="{% url 'player_detail' most_sets_player.id %}" class="text-decoration-none fw-bold">{{ most_sets_player.name }}</a>
+                    </div>
+                {% else %}
+                    <span class="text-muted">No data</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #dc3545 !important;">
+            <div class="card-body text-center p-4">
+                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Biggest Rivalry</div>
+                {% if biggest_rivalry %}
+                    <h2 class="display-6 fw-bold text-danger mb-1">{{ biggest_rivalry.meetings }}</h2>
+                    <div class="small">
+                        <a href="{% url 'player_detail' biggest_rivalry.player_a.id %}" class="text-decoration-none fw-bold">{{ biggest_rivalry.player_a.name }}</a>
+                        <span class="text-muted mx-1">vs</span>
+                        <a href="{% url 'player_detail' biggest_rivalry.player_b.id %}" class="text-decoration-none fw-bold">{{ biggest_rivalry.player_b.name }}</a>
+                    </div>
+                    <div class="small text-muted mt-1">{{ biggest_rivalry.a_wins }}–{{ biggest_rivalry.b_wins }}</div>
+                {% else %}
+                    <span class="text-muted">No data</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom row: Rivalries + Streaks + Top Events -->
+<div class="row g-4">
+    <!-- Top Rivalries -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Top Rivalries</h5>
+                <small class="text-muted">Most-played matchups, all time</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Players</th>
+                            <th class="text-center">Record</th>
+                            <th class="text-end pe-3">Meetings</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rivalries %}
+                        <tr>
+                            <td class="ps-3">
+                                <a href="{% url 'player_detail' r.player_a.id %}" class="text-decoration-none fw-bold d-block">{{ r.player_a.name }}</a>
+                                <a href="{% url 'player_detail' r.player_b.id %}" class="text-decoration-none text-muted d-block">{{ r.player_b.name }}</a>
+                            </td>
+                            <td class="text-center">
+                                <span class="text-success fw-bold">{{ r.a_wins }}</span>
+                                <span class="text-muted">–</span>
+                                <span class="text-danger fw-bold">{{ r.b_wins }}</span>
+                            </td>
+                            <td class="text-end pe-3">
+                                <span class="badge bg-secondary">{{ r.meetings }}</span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Streak Leaderboard -->
+    <div class="col-lg-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Best Win Streaks</h5>
+                <small class="text-muted">Best-ever consecutive wins</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">#</th>
+                            <th>Player</th>
+                            <th class="text-end pe-3">Streak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in streaks %}
+                        <tr>
+                            <td class="ps-3 text-muted">{{ forloop.counter }}</td>
+                            <td><a href="{% url 'player_detail' s.player.id %}" class="text-decoration-none fw-bold">{{ s.player.name }}</a></td>
+                            <td class="text-end pe-3"><span class="badge bg-primary">{{ s.streak }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Top Events -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Biggest Events</h5>
+                <small class="text-muted">By attendance{% if selected_year %}, {{ selected_year }}{% endif %}</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">Tournament</th>
+                            <th class="text-end pe-3">Entrants</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in top_events %}
+                        <tr>
+                            <td class="ps-3">
+                                <a href="{% url 'tournament_details' e.id %}" class="text-decoration-none fw-bold d-block">{{ e.name }}</a>
+                                <small class="text-muted">{{ e.date }}{% if e.city %} · {{ e.city }}{% endif %}</small>
+                            </td>
+                            <td class="text-end pe-3"><span class="badge bg-primary">{{ e.entrant_count }}</span></td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="2" class="text-center text-muted py-3">No events found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>

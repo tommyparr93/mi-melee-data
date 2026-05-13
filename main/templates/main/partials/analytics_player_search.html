@@ -1,0 +1,15 @@
+{% for player in players %}
+<div class="px-3 py-2 border-bottom" style="cursor:pointer;"
+     onmouseenter="this.classList.add('bg-light')"
+     onmouseleave="this.classList.remove('bg-light')"
+     onclick="selectPlayer({{ num }}, {{ player.id }}, '{{ player.name|escapejs }}')">
+    <span class="fw-bold">{{ player.name }}</span>
+    {% if player.region_code %}
+        <small class="text-muted ms-2">{{ player.region_code.name }}</small>
+    {% endif %}
+</div>
+{% empty %}
+{% if request.GET.q %}
+<div class="px-3 py-2 text-muted small">No players found.</div>
+{% endif %}
+{% endfor %}

@@ -1,0 +1,253 @@
+<!-- Player Picker -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="mb-3">Compare Two Players</h5>
+        <div class="row g-3">
+            <!-- Player 1 -->
+            <div class="col-md-5">
+                <label class="form-label small text-muted fw-bold text-uppercase" style="font-size:0.7rem;">Player 1</label>
+                <div class="position-relative">
+                    <input type="text" id="p1-name" class="form-control"
+                           placeholder="Search player..."
+                           value="{% if p1 %}{{ p1.name }}{% endif %}"
+                           autocomplete="off"
+                           hx-get="{% url 'analytics_player_search' %}?num=1"
+                           hx-trigger="keyup changed delay:250ms"
+                           hx-target="#p1-dropdown"
+                           hx-include="#p1-name"
+                           name="q">
+                    <input type="hidden" id="p1-id" name="p1" value="{% if p1 %}{{ p1.id }}{% endif %}">
+                    <div id="p1-dropdown" class="position-absolute w-100 shadow bg-white rounded-bottom border" style="z-index:1050; top:100%;"></div>
+                </div>
+            </div>
+
+            <div class="col-md-2 d-flex align-items-end justify-content-center pb-1">
+                <span class="fw-bold text-muted fs-4">vs</span>
+            </div>
+
+            <!-- Player 2 -->
+            <div class="col-md-5">
+                <label class="form-label small text-muted fw-bold text-uppercase" style="font-size:0.7rem;">Player 2</label>
+                <div class="position-relative">
+                    <input type="text" id="p2-name" class="form-control"
+                           placeholder="Search player..."
+                           value="{% if p2 %}{{ p2.name }}{% endif %}"
+                           autocomplete="off"
+                           hx-get="{% url 'analytics_player_search' %}?num=2"
+                           hx-trigger="keyup changed delay:250ms"
+                           hx-target="#p2-dropdown"
+                           hx-include="#p2-name"
+                           name="q">
+                    <input type="hidden" id="p2-id" name="p2" value="{% if p2 %}{{ p2.id }}{% endif %}">
+                    <div id="p2-dropdown" class="position-absolute w-100 shadow bg-white rounded-bottom border" style="z-index:1050; top:100%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if p1 and p2 %}
+
+<!-- Direct Record Banner -->
+<div class="card shadow-sm mb-4" style="border-left: 5px solid #0d6efd !important;">
+    <div class="card-body">
+        <div class="row text-center align-items-center">
+            <div class="col">
+                <a href="{% url 'player_detail' p1.id %}" class="text-decoration-none">
+                    <h3 class="fw-bold text-primary mb-0">{{ p1.name }}</h3>
+                </a>
+            </div>
+            <div class="col-auto">
+                <div class="display-5 fw-bold">
+                    <span class="{% if p1_direct_wins > p2_direct_wins %}text-success{% elif p1_direct_wins < p2_direct_wins %}text-danger{% else %}text-muted{% endif %}">{{ p1_direct_wins }}</span>
+                    <span class="text-muted mx-2">–</span>
+                    <span class="{% if p2_direct_wins > p1_direct_wins %}text-success{% elif p2_direct_wins < p1_direct_wins %}text-danger{% else %}text-muted{% endif %}">{{ p2_direct_wins }}</span>
+                </div>
+                <div class="small text-muted mt-1">{{ direct_total }} set{{ direct_total|pluralize }} head-to-head</div>
+            </div>
+            <div class="col">
+                <a href="{% url 'player_detail' p2.id %}" class="text-decoration-none">
+                    <h3 class="fw-bold text-primary mb-0">{{ p2.name }}</h3>
+                </a>
+            </div>
+        </div>
+        {% if direct_total > 0 %}
+        <div class="progress mt-3" style="height: 8px; border-radius: 4px;">
+            {% with pct=p1_direct_wins|floatformat:0 %}
+            <div class="progress-bar bg-primary" style="width: {% widthratio p1_direct_wins direct_total 100 %}%"></div>
+            <div class="progress-bar bg-danger" style="width: {% widthratio p2_direct_wins direct_total 100 %}%"></div>
+            {% endwith %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Side-by-Side Stats -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white"><h5 class="mb-0">Stats Comparison</h5></div>
+            <div class="card-body p-0">
+                <table class="table align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 text-primary">{{ p1.name }}</th>
+                            <th class="text-center text-muted small"></th>
+                            <th class="text-end pe-3 text-danger">{{ p2.name }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td class="ps-3 fw-bold {% if p1_stats.win_rate >= p2_stats.win_rate %}text-success{% endif %}">{{ p1_stats.win_rate }}%</td>
+                            <td class="text-center text-muted small">Win Rate</td>
+                            <td class="text-end pe-3 fw-bold {% if p2_stats.win_rate > p1_stats.win_rate %}text-success{% endif %}">{{ p2_stats.win_rate }}%</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3 fw-bold {% if p1_stats.total >= p2_stats.total %}text-success{% endif %}">{{ p1_stats.total }}</td>
+                            <td class="text-center text-muted small">Total Sets</td>
+                            <td class="text-end pe-3 fw-bold {% if p2_stats.total > p1_stats.total %}text-success{% endif %}">{{ p2_stats.total }}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">{{ p1_stats.wins }} W / {{ p1_stats.losses }} L</td>
+                            <td class="text-center text-muted small">Record</td>
+                            <td class="text-end pe-3">{{ p2_stats.wins }} W / {{ p2_stats.losses }} L</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3 fw-bold {% if p1_stats.tournaments >= p2_stats.tournaments %}text-success{% endif %}">{{ p1_stats.tournaments }}</td>
+                            <td class="text-center text-muted small">Tournaments</td>
+                            <td class="text-end pe-3 fw-bold {% if p2_stats.tournaments > p1_stats.tournaments %}text-success{% endif %}">{{ p2_stats.tournaments }}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">{% if p1_stats.current_pr %}#{{ p1_stats.current_pr.rank }}{% else %}—{% endif %}</td>
+                            <td class="text-center text-muted small">Current PR</td>
+                            <td class="text-end pe-3">{% if p2_stats.current_pr %}#{{ p2_stats.current_pr.rank }}{% else %}—{% endif %}</td>
+                        </tr>
+                        <tr>
+                            <td class="ps-3">{% if p1_stats.best_rank %}#{{ p1_stats.best_rank }}{% else %}—{% endif %}</td>
+                            <td class="text-center text-muted small">Best PR Ever</td>
+                            <td class="text-end pe-3">{% if p2_stats.best_rank %}#{{ p2_stats.best_rank }}{% else %}—{% endif %}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Win Rate by Year Chart -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Win Rate by Year</h5>
+                <small class="text-muted">Overall win rate per year, all opponents</small>
+            </div>
+            <div class="card-body">
+                <canvas id="yearlyChart" height="260"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Common Opponents -->
+{% if common_opponents %}
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-white">
+        <h5 class="mb-0">Common Opponents</h5>
+        <small class="text-muted">Players both have faced — sorted by combined meetings</small>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-hover align-middle mb-0 small">
+            <thead class="table-light">
+                <tr>
+                    <th class="ps-3">Opponent</th>
+                    <th class="text-center">{{ p1.name }}</th>
+                    <th class="text-center">{{ p2.name }}</th>
+                    <th class="text-center">Advantage</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for opp in common_opponents %}
+                <tr>
+                    <td class="ps-3">
+                        <a href="{% url 'player_detail' opp.opponent.id %}" class="text-decoration-none fw-bold">{{ opp.opponent.name }}</a>
+                    </td>
+                    <td class="text-center">
+                        <span class="{% if opp.p1_wr >= 50 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ opp.p1_w }}–{{ opp.p1_l }}</span>
+                        <span class="text-muted small ms-1">({{ opp.p1_wr }}%)</span>
+                    </td>
+                    <td class="text-center">
+                        <span class="{% if opp.p2_wr >= 50 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ opp.p2_w }}–{{ opp.p2_l }}</span>
+                        <span class="text-muted small ms-1">({{ opp.p2_wr }}%)</span>
+                    </td>
+                    <td class="text-center">
+                        {% if opp.advantage == 'Even' %}
+                            <span class="badge bg-secondary">Even</span>
+                        {% elif opp.advantage == p1.name %}
+                            <span class="badge bg-primary">{{ p1.name }}</span>
+                        {% else %}
+                            <span class="badge bg-danger">{{ p2.name }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<script id="yearly-chart-data" type="application/json">{{ yearly_chart_data|safe }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const data = JSON.parse(document.getElementById('yearly-chart-data').textContent);
+    new Chart(document.getElementById('yearlyChart'), {
+        type: 'line',
+        data: {
+            labels: data.years,
+            datasets: [
+                { label: '{{ p1.name|escapejs }}', data: data.p1, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.2, spanGaps: true },
+                { label: '{{ p2.name|escapejs }}', data: data.p2, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.2, spanGaps: true },
+            ]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'top' } },
+            scales: {
+                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Win Rate %' } }
+            }
+        }
+    });
+})();
+</script>
+
+{% else %}
+<div class="text-center text-muted py-5">
+    <p class="fs-5">Search for two players above to compare them.</p>
+</div>
+{% endif %}
+
+<script>
+// Player picker: fill hidden ID field and trigger comparison load when both selected
+function selectPlayer(num, id, name) {
+    document.getElementById('p' + num + '-name').value = name;
+    document.getElementById('p' + num + '-id').value = id;
+    document.getElementById('p' + num + '-dropdown').innerHTML = '';
+    tryLoadComparison();
+}
+
+function tryLoadComparison() {
+    const p1 = document.getElementById('p1-id').value;
+    const p2 = document.getElementById('p2-id').value;
+    if (p1 && p2 && p1 !== p2) {
+        htmx.ajax('GET', '{% url "analytics_h2h" %}?p1=' + p1 + '&p2=' + p2, '#analytics-content');
+    }
+}
+
+// Clear player ID when user edits the search box manually
+document.getElementById('p1-name').addEventListener('input', function() {
+    if (!this._selecting) document.getElementById('p1-id').value = '';
+});
+document.getElementById('p2-name').addEventListener('input', function() {
+    if (!this._selecting) document.getElementById('p2-id').value = '';
+});
+</script>

@@ -1,6 +1,8 @@
+import json
 from django.db import transaction, models
 from django.http import HttpResponse
 from django.core.paginator import Paginator
+from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, get_object_or_404
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from .forms import TournamentForm, PRSeasonForm, DuplicatePlayer, ConfirmMergeForm, PRSeasonResultForm
@@ -786,4 +788,394 @@ class PRSeasonAdminDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailVie
         context['ranked_players'] = PRSeasonResult.objects.filter(
             pr_season=self.object
         ).select_related('player').order_by('rank')
+        return context
+
+
+MIN_SETS_FOR_WIN_RATE = 10
+TOP_N_PLAYERS = 15
+MICHIGAN_REGION_CODE = 7
+
+
+def _parse_int_param(request, name, default=None):
+    raw = request.GET.get(name)
+    if raw in (None, '', 'all'):
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return default
+
+
+class AnalyticsView(generic.TemplateView):
+    """Shell view — renders the tab nav and loads the General tab by default."""
+    template_name = 'main/analytics.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['active_tab'] = self.request.GET.get('tab', 'general')
+        return context
+
+
+# ---------------------------------------------------------------------------
+# Tab 1: General (Fun Stats)
+# ---------------------------------------------------------------------------
+
+class AnalyticsGeneralView(generic.TemplateView):
+    template_name = 'main/partials/analytics_general.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        selected_year = _parse_int_param(self.request, 'year')
+
+        # --- All sets ordered by tournament date for streak computation ---
+        all_sets = list(
+            Set.objects.select_related('tournament')
+            .exclude(winner_id__isnull=True)
+            .order_by('tournament__date')
+            .values('player1_id', 'player2_id', 'winner_id')
+        )
+
+        # --- Rivalries: group by sorted player pair ---
+        rivalry_map = defaultdict(lambda: {'meetings': 0, 'wins': defaultdict(int)})
+        total_sets_per_player = defaultdict(int)
+        for s in all_sets:
+            p1, p2, w = s['player1_id'], s['player2_id'], s['winner_id']
+            if not p1 or not p2:
+                continue
+            total_sets_per_player[p1] += 1
+            total_sets_per_player[p2] += 1
+            key = (min(p1, p2), max(p1, p2))
+            rivalry_map[key]['meetings'] += 1
+            rivalry_map[key]['wins'][w] += 1
+
+        # --- Streak computation ---
+        current_streak = defaultdict(int)
+        best_streak = defaultdict(int)
+        for s in all_sets:
+            p1, p2, w = s['player1_id'], s['player2_id'], s['winner_id']
+            if not p1 or not p2 or not w:
+                continue
+            loser = p2 if w == p1 else p1
+            current_streak[w] += 1
+            current_streak[loser] = 0
+            if current_streak[w] > best_streak[w]:
+                best_streak[w] = current_streak[w]
+
+        # --- Fetch player names for rivalries + streaks ---
+        top_rivalry_keys = sorted(rivalry_map.keys(), key=lambda k: rivalry_map[k]['meetings'], reverse=True)[:10]
+        streak_player_ids = [pid for pid, _ in sorted(best_streak.items(), key=lambda x: x[1], reverse=True)[:10]]
+        player_id_set = set(streak_player_ids)
+        for a, b in top_rivalry_keys:
+            player_id_set.add(a)
+            player_id_set.add(b)
+        player_lookup = {p.id: p for p in Player.objects.filter(id__in=player_id_set)}
+
+        # Build rivalry rows
+        rivalries = []
+        for a_id, b_id in top_rivalry_keys:
+            data = rivalry_map[(a_id, b_id)]
+            a = player_lookup.get(a_id)
+            b = player_lookup.get(b_id)
+            if not a or not b:
+                continue
+            rivalries.append({
+                'player_a': a,
+                'player_b': b,
+                'meetings': data['meetings'],
+                'a_wins': data['wins'].get(a_id, 0),
+                'b_wins': data['wins'].get(b_id, 0),
+            })
+
+        # Build streak leaderboard
+        streaks = []
+        for pid in streak_player_ids:
+            p = player_lookup.get(pid)
+            if p:
+                streaks.append({'player': p, 'streak': best_streak[pid]})
+
+        # Stat cards
+        most_sets_pid = max(total_sets_per_player, key=total_sets_per_player.get) if total_sets_per_player else None
+        most_sets_player = Player.objects.filter(id=most_sets_pid).first() if most_sets_pid else None
+        biggest_rivalry = rivalries[0] if rivalries else None
+        top_streak = streaks[0] if streaks else None
+
+        # --- Top 10 events (filterable by year) ---
+        events_qs = Tournament.objects.filter(
+            region_code=MICHIGAN_REGION_CODE
+        ).exclude(online=True).exclude(entrant_count__isnull=True)
+        if selected_year:
+            events_qs = events_qs.filter(date__year=selected_year)
+        top_events = list(events_qs.order_by('-entrant_count').values('id', 'name', 'date', 'entrant_count', 'city')[:10])
+
+        all_years = list(
+            Tournament.objects.filter(region_code=MICHIGAN_REGION_CODE)
+            .exclude(date__isnull=True)
+            .order_by('date__year')
+            .values_list('date__year', flat=True)
+            .distinct()
+        )
+
+        context.update({
+            'rivalries': rivalries,
+            'streaks': streaks,
+            'top_events': top_events,
+            'most_sets_player': most_sets_player,
+            'most_sets_count': total_sets_per_player.get(most_sets_pid, 0),
+            'biggest_rivalry': biggest_rivalry,
+            'top_streak': top_streak,
+            'available_years': sorted(set(all_years), reverse=True),
+            'selected_year': selected_year,
+        })
+        return context
+
+
+# ---------------------------------------------------------------------------
+# Tab 2: PR Analytics
+# ---------------------------------------------------------------------------
+
+class AnalyticsPRView(generic.TemplateView):
+    template_name = 'main/partials/analytics_pr.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        selected_season = _parse_int_param(self.request, 'season')
+        top_n = _parse_int_param(self.request, 'top_n', default=TOP_N_PLAYERS) or TOP_N_PLAYERS
+        min_sets = _parse_int_param(self.request, 'min_sets', default=MIN_SETS_FOR_WIN_RATE) or MIN_SETS_FOR_WIN_RATE
+
+        sets_qs = Set.objects.all()
+        if selected_season is not None:
+            sets_qs = sets_qs.filter(tournament__pr_season_id=selected_season)
+
+        wins = defaultdict(int)
+        totals = defaultdict(int)
+        player_tourneys = defaultdict(set)
+        for s in sets_qs.values('player1_id', 'player2_id', 'winner_id', 'tournament_id'):
+            p1, p2, w, t = s['player1_id'], s['player2_id'], s['winner_id'], s['tournament_id']
+            if p1:
+                totals[p1] += 1
+                if t:
+                    player_tourneys[p1].add(t)
+            if p2:
+                totals[p2] += 1
+                if t:
+                    player_tourneys[p2].add(t)
+            if w:
+                wins[w] += 1
+
+        mi_players = list(Player.objects.filter(region_code=MICHIGAN_REGION_CODE).values('id', 'name'))
+
+        win_rate_rows = []
+        activity_rows = []
+        player_id_map = {}
+        for p in mi_players:
+            pid, name = p['id'], p['name'] or 'Unknown'
+            player_id_map[pid] = name
+            total = totals[pid]
+            if total >= min_sets:
+                win_rate = round((wins[pid] / total) * 100, 1)
+                win_rate_rows.append({'id': pid, 'name': name, 'win_rate': win_rate, 'sets': total})
+            tourney_count = len(player_tourneys[pid])
+            if tourney_count > 0:
+                activity_rows.append({'id': pid, 'name': name, 'tournaments': tourney_count})
+
+        win_rate_rows.sort(key=lambda r: r['win_rate'], reverse=True)
+        activity_rows.sort(key=lambda r: r['tournaments'], reverse=True)
+
+        # Tournaments per year
+        per_year = defaultdict(int)
+        for t in Tournament.objects.filter(region_code=MICHIGAN_REGION_CODE).exclude(online=True).exclude(date__isnull=True).values('date'):
+            per_year[t['date'].year] += 1
+        per_year_rows = [{'year': str(y), 'count': c} for y, c in sorted(per_year.items())]
+
+        # PR ranking history
+        season_results = PRSeasonResult.objects.filter(
+            pr_season__region_code=MICHIGAN_REGION_CODE
+        ).select_related('player', 'pr_season').order_by('pr_season__start_date', 'rank')
+
+        season_order = []
+        season_seen = set()
+        player_ranks = defaultdict(dict)
+        for r in season_results:
+            sname = r.pr_season.name
+            if sname not in season_seen:
+                season_seen.add(sname)
+                season_order.append(sname)
+            try:
+                rank_val = int(r.rank)
+            except (TypeError, ValueError):
+                continue
+            player_ranks[r.player.name or f'Player {r.player_id}'][sname] = rank_val
+
+        pr_history = [
+            {'name': name, 'ranks': [ranks.get(s) for s in season_order]}
+            for name, ranks in player_ranks.items()
+            if len(ranks) >= 2
+        ]
+        pr_history.sort(key=lambda p: min(r for r in p['ranks'] if r is not None))
+
+        available_seasons = list(PRSeason.objects.filter(
+            region_code=MICHIGAN_REGION_CODE
+        ).order_by('-start_date').values('id', 'name'))
+
+        context.update({
+            'available_seasons': available_seasons,
+            'selected_season': selected_season,
+            'selected_top_n': top_n,
+            'selected_min_sets': min_sets,
+            'top_n_options': [10, 15, 20, 30],
+            'min_sets_options': [5, 10, 20, 50],
+            'win_rate_data': json.dumps(win_rate_rows[:top_n], cls=DjangoJSONEncoder),
+            'activity_data': json.dumps(activity_rows[:top_n], cls=DjangoJSONEncoder),
+            'tournaments_per_year_data': json.dumps(per_year_rows, cls=DjangoJSONEncoder),
+            'pr_history_data': json.dumps({'seasons': season_order, 'players': pr_history}, cls=DjangoJSONEncoder),
+        })
+        return context
+
+
+# ---------------------------------------------------------------------------
+# Tab 3: Head to Head
+# ---------------------------------------------------------------------------
+
+class AnalyticsH2HView(generic.TemplateView):
+    template_name = 'main/partials/analytics_h2h.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        p1_id = _parse_int_param(self.request, 'p1')
+        p2_id = _parse_int_param(self.request, 'p2')
+
+        if not p1_id or not p2_id or p1_id == p2_id:
+            return context
+
+        try:
+            p1 = Player.objects.get(id=p1_id)
+            p2 = Player.objects.get(id=p2_id)
+        except Player.DoesNotExist:
+            return context
+
+        # All sets involving either player
+        all_sets = list(
+            Set.objects.filter(
+                Q(player1_id__in=[p1_id, p2_id]) | Q(player2_id__in=[p1_id, p2_id])
+            ).select_related('tournament').order_by('tournament__date')
+        )
+
+        # Direct H2H record
+        direct_sets = [s for s in all_sets if
+                       (s.player1_id == p1_id or s.player2_id == p1_id) and
+                       (s.player1_id == p2_id or s.player2_id == p2_id)]
+        p1_direct_wins = sum(1 for s in direct_sets if s.winner_id == p1_id)
+        p2_direct_wins = sum(1 for s in direct_sets if s.winner_id == p2_id)
+
+        # Side-by-side stats
+        def player_stats(player, sets):
+            player_sets = [s for s in sets if s.player1_id == player.id or s.player2_id == player.id]
+            total = len(player_sets)
+            w = sum(1 for s in player_sets if s.winner_id == player.id)
+            tourneys = len({s.tournament_id for s in player_sets if s.tournament_id})
+            wr = round((w / total) * 100, 1) if total > 0 else 0
+            pr = PRSeasonResult.objects.filter(player=player).order_by('rank').first()
+            best_pr = PRSeasonResult.objects.filter(player=player).order_by('rank').values_list('rank', flat=True)
+            best_rank = min((int(r) for r in best_pr if r and r.isdigit()), default=None)
+            return {'wins': w, 'losses': total - w, 'win_rate': wr, 'total': total,
+                    'tournaments': tourneys, 'current_pr': pr, 'best_rank': best_rank}
+
+        # Use full set history (not just shared sets) for side-by-side
+        p1_all = list(Set.objects.filter(
+            Q(player1_id=p1_id) | Q(player2_id=p1_id)
+        ).select_related('tournament'))
+        p2_all = list(Set.objects.filter(
+            Q(player1_id=p2_id) | Q(player2_id=p2_id)
+        ).select_related('tournament'))
+
+        p1_stats = player_stats(p1, p1_all)
+        p2_stats = player_stats(p2, p2_all)
+
+        # Common opponents
+        p1_opponents = defaultdict(lambda: {'w': 0, 'l': 0})
+        p2_opponents = defaultdict(lambda: {'w': 0, 'l': 0})
+        for s in p1_all:
+            opp = s.player2_id if s.player1_id == p1_id else s.player1_id
+            if not opp or opp == p2_id:
+                continue
+            if s.winner_id == p1_id:
+                p1_opponents[opp]['w'] += 1
+            else:
+                p1_opponents[opp]['l'] += 1
+        for s in p2_all:
+            opp = s.player2_id if s.player1_id == p2_id else s.player1_id
+            if not opp or opp == p1_id:
+                continue
+            if s.winner_id == p2_id:
+                p2_opponents[opp]['w'] += 1
+            else:
+                p2_opponents[opp]['l'] += 1
+
+        common_opp_ids = set(p1_opponents.keys()) & set(p2_opponents.keys())
+        common_opp_players = {p.id: p for p in Player.objects.filter(id__in=common_opp_ids)}
+        common_opponents = []
+        for opp_id in common_opp_ids:
+            opp = common_opp_players.get(opp_id)
+            if not opp:
+                continue
+            p1r = p1_opponents[opp_id]
+            p2r = p2_opponents[opp_id]
+            p1_wr = round(p1r['w'] / (p1r['w'] + p1r['l']) * 100) if (p1r['w'] + p1r['l']) > 0 else 0
+            p2_wr = round(p2r['w'] / (p2r['w'] + p2r['l']) * 100) if (p2r['w'] + p2r['l']) > 0 else 0
+            total = p1r['w'] + p1r['l'] + p2r['w'] + p2r['l']
+            common_opponents.append({
+                'opponent': opp,
+                'p1_w': p1r['w'], 'p1_l': p1r['l'], 'p1_wr': p1_wr,
+                'p2_w': p2r['w'], 'p2_l': p2r['l'], 'p2_wr': p2_wr,
+                'total': total,
+                'advantage': p1.name if p1_wr > p2_wr else (p2.name if p2_wr > p1_wr else 'Even'),
+            })
+        common_opponents.sort(key=lambda x: x['total'], reverse=True)
+
+        # Win rate by year
+        def win_rate_by_year(player, sets):
+            by_year = defaultdict(lambda: {'w': 0, 't': 0})
+            for s in sets:
+                yr = s.tournament.date.year if s.tournament and s.tournament.date else None
+                if not yr:
+                    continue
+                by_year[yr]['t'] += 1
+                if s.winner_id == player.id:
+                    by_year[yr]['w'] += 1
+            return {str(y): round(d['w'] / d['t'] * 100, 1) if d['t'] > 0 else 0
+                    for y, d in sorted(by_year.items())}
+
+        p1_yearly = win_rate_by_year(p1, p1_all)
+        p2_yearly = win_rate_by_year(p2, p2_all)
+        all_years = sorted(set(p1_yearly.keys()) | set(p2_yearly.keys()))
+        yearly_chart = {
+            'years': all_years,
+            'p1': [p1_yearly.get(y) for y in all_years],
+            'p2': [p2_yearly.get(y) for y in all_years],
+        }
+
+        context.update({
+            'p1': p1, 'p2': p2,
+            'p1_direct_wins': p1_direct_wins,
+            'p2_direct_wins': p2_direct_wins,
+            'direct_total': len(direct_sets),
+            'p1_stats': p1_stats,
+            'p2_stats': p2_stats,
+            'common_opponents': common_opponents[:15],
+            'yearly_chart_data': json.dumps(yearly_chart, cls=DjangoJSONEncoder),
+        })
+        return context
+
+
+class AnalyticsPlayerSearchView(generic.TemplateView):
+    """Lightweight player search for the H2H picker."""
+    template_name = 'main/partials/analytics_player_search.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        q = self.request.GET.get('q', '').strip()
+        num = self.request.GET.get('num', '1')
+        players = (Player.objects.filter(name__icontains=q).select_related('region_code').order_by('name')[:8]
+                   if len(q) >= 2 else [])
+        context.update({'players': players, 'num': num})
         return context

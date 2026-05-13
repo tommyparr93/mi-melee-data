@@ -20,5 +20,10 @@ urlpatterns = [
     path('seasons/add/', PRSeasonCreateView.as_view(), name='pr_season_create'),
     path('seasons/manage/<int:pk>/', PRSeasonAdminDetailView.as_view(), name='pr_season_admin_detail'),
     path('seasons/manage/<int:season_id>/add-player/', views.add_player_to_season, name='add_player_to_season'),
+    path('analytics/', views.AnalyticsView.as_view(), name='analytics'),
+    path('analytics/tab/general/', views.AnalyticsGeneralView.as_view(), name='analytics_general'),
+    path('analytics/tab/pr/', views.AnalyticsPRView.as_view(), name='analytics_pr'),
+    path('analytics/tab/h2h/', views.AnalyticsH2HView.as_view(), name='analytics_h2h'),
+    path('analytics/player-search/', views.AnalyticsPlayerSearchView.as_view(), name='analytics_player_search'),
 
 ]

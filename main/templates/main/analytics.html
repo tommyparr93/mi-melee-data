@@ -1,0 +1,65 @@
+{% extends 'base.html' %}
+{% block title %}Michigan Melee - Analytics{% endblock %}
+
+{% block content %}
+<div class="p-4 mb-4 bg-light rounded-3 border">
+    <div class="container-fluid py-3 text-center">
+        <h1 class="display-6 fw-bold">Michigan Melee Analytics</h1>
+        <p class="fs-5 text-muted">Data and visualizations for the Michigan Melee scene</p>
+    </div>
+</div>
+
+<!-- Tab Nav -->
+<div class="d-flex gap-2 mb-4">
+    <button id="btn-general"
+            class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'general' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
+            hx-get="{% url 'analytics_general' %}"
+            hx-target="#analytics-content"
+            hx-push-url="{% url 'analytics' %}?tab=general">
+        General
+    </button>
+    <button id="btn-pr"
+            class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'pr' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
+            hx-get="{% url 'analytics_pr' %}"
+            hx-target="#analytics-content"
+            hx-push-url="{% url 'analytics' %}?tab=pr">
+        PR Analytics
+    </button>
+    <button id="btn-h2h"
+            class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'h2h' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
+            hx-get="{% url 'analytics_h2h' %}"
+            hx-target="#analytics-content"
+            hx-push-url="{% url 'analytics' %}?tab=h2h">
+        Head to Head
+    </button>
+</div>
+
+<!-- Tab Content (loaded via HTMX) -->
+<div id="analytics-content">
+    {% if active_tab == 'general' %}
+        {% include 'main/partials/analytics_general.html' %}
+    {% elif active_tab == 'pr' %}
+        {% include 'main/partials/analytics_pr.html' %}
+    {% elif active_tab == 'h2h' %}
+        {% include 'main/partials/analytics_h2h.html' %}
+    {% endif %}
+</div>
+
+<script>
+document.body.addEventListener('htmx:afterOnLoad', function(evt) {
+    if (evt.detail.target.id === 'analytics-content') {
+        const url = new URL(window.location.href);
+        const tab = url.searchParams.get('tab') || 'general';
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.classList.remove('btn-primary', 'text-white', 'active');
+            btn.classList.add('btn-outline-primary');
+        });
+        const active = document.getElementById('btn-' + tab);
+        if (active) {
+            active.classList.remove('btn-outline-primary');
+            active.classList.add('btn-primary', 'text-white', 'active');
+        }
+    }
+});
+</script>
+{% endblock %}

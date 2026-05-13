@@ -1,0 +1,196 @@
+<!-- Filters (auto-apply on change) -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="row align-items-center g-3">
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">PR Season</label>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_pr' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-filter]"
+                        name="season" data-filter>
+                    <option value="all" {% if not selected_season %}selected{% endif %}>All time</option>
+                    {% for s in available_seasons %}
+                        <option value="{{ s.id }}" {% if selected_season == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">Show top</label>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_pr' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-filter]"
+                        name="top_n" data-filter>
+                    {% for n in top_n_options %}
+                        <option value="{{ n }}" {% if selected_top_n == n %}selected{% endif %}>Top {{ n }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">Min sets</label>
+            </div>
+            <div class="col-auto">
+                <select class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_pr' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-filter]"
+                        name="min_sets" data-filter>
+                    {% for n in min_sets_options %}
+                        <option value="{{ n }}" {% if selected_min_sets == n %}selected{% endif %}>{{ n }}+ sets</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 1: Win Rate + Activity -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Top Players by Win Rate</h5>
+                <small class="text-muted">Michigan players with {{ selected_min_sets }}+ sets{% if selected_season %} in selected season{% endif %} — click to view player</small>
+            </div>
+            <div class="card-body">
+                <canvas id="winRateChart" height="320"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Most Active Players</h5>
+                <small class="text-muted">By tournaments attended — click to view player</small>
+            </div>
+            <div class="card-body">
+                <canvas id="activityChart" height="320"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row 2: Tournaments per Year + PR History -->
+<div class="row g-4 mb-4">
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Tournaments per Year</h5>
+                <small class="text-muted">In-person Michigan tournaments</small>
+            </div>
+            <div class="card-body">
+                <canvas id="tournamentsPerYearChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">PR Rank Movement Across Seasons</h5>
+                <small class="text-muted">Players appearing in 2+ seasons — rank 1 at top</small>
+            </div>
+            <div class="card-body">
+                <canvas id="prHistoryChart" height="280"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script id="win-rate-data" type="application/json">{{ win_rate_data|safe }}</script>
+<script id="activity-data" type="application/json">{{ activity_data|safe }}</script>
+<script id="tournaments-per-year-data" type="application/json">{{ tournaments_per_year_data|safe }}</script>
+<script id="pr-history-data" type="application/json">{{ pr_history_data|safe }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    const parse = (id) => JSON.parse(document.getElementById(id).textContent);
+    const winRateData = parse('win-rate-data');
+    const activityData = parse('activity-data');
+    const perYearData = parse('tournaments-per-year-data');
+    const prHistory = parse('pr-history-data');
+
+    const palette = ['#0d6efd','#dc3545','#198754','#ffc107','#6610f2','#fd7e14','#20c997','#d63384','#0dcaf0','#6c757d','#0d6efd','#dc3545','#198754','#ffc107','#6610f2'];
+
+    // Build player ID → URL map for click navigation
+    const winRateIds = winRateData.map(d => d.id);
+    const activityIds = activityData.map(d => d.id);
+
+    function makeClickable(chart, ids) {
+        chart.canvas.addEventListener('click', function(e) {
+            const pts = chart.getElementsAtEventForMode(e, 'nearest', {intersect: true}, true);
+            if (pts.length) {
+                const idx = pts[0].index;
+                if (ids[idx]) window.location.href = '/player/' + ids[idx] + '/';
+            }
+        });
+        chart.canvas.style.cursor = 'pointer';
+    }
+
+    const winRateChart = new Chart(document.getElementById('winRateChart'), {
+        type: 'bar',
+        data: {
+            labels: winRateData.map(d => d.name),
+            datasets: [{ label: 'Win Rate (%)', data: winRateData.map(d => d.win_rate), backgroundColor: '#0d6efd' }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { afterLabel: (ctx) => `Sets: ${winRateData[ctx.dataIndex].sets}` } }
+            },
+            scales: { x: { beginAtZero: true, max: 100, title: { display: true, text: 'Win Rate %' } } }
+        }
+    });
+    makeClickable(winRateChart, winRateIds);
+
+    const activityChart = new Chart(document.getElementById('activityChart'), {
+        type: 'bar',
+        data: {
+            labels: activityData.map(d => d.name),
+            datasets: [{ label: 'Tournaments', data: activityData.map(d => d.tournaments), backgroundColor: '#198754' }]
+        },
+        options: {
+            indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true } }
+        }
+    });
+    makeClickable(activityChart, activityIds);
+
+    new Chart(document.getElementById('tournamentsPerYearChart'), {
+        type: 'bar',
+        data: {
+            labels: perYearData.map(d => d.year),
+            datasets: [{ label: 'Tournaments', data: perYearData.map(d => d.count), backgroundColor: '#fd7e14' }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+
+    const prDatasets = prHistory.players.map((p, i) => ({
+        label: p.name, data: p.ranks,
+        borderColor: palette[i % palette.length], backgroundColor: palette[i % palette.length],
+        spanGaps: true, tension: 0.2,
+    }));
+    new Chart(document.getElementById('prHistoryChart'), {
+        type: 'line',
+        data: { labels: prHistory.seasons, datasets: prDatasets },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { position: 'right', labels: { boxWidth: 12 } } },
+            scales: { y: { reverse: true, beginAtZero: false, title: { display: true, text: 'Rank' }, ticks: { stepSize: 1 } } }
+        }
+    });
+})();
+</script>
