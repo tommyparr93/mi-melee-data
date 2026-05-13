@@ -200,6 +200,10 @@ def get_head_to_head_results2(player, sets):
     return opponent_records
 
 
+from django.contrib import messages
+import threading
+from .data_entry import enter_tournament_async
+
 def put_tournament(request):
     if request.method == 'POST':
         form = TournamentForm(request.POST)
@@ -207,10 +211,26 @@ def put_tournament(request):
             cleaned_data = form.cleaned_data
             tournament_url = cleaned_data['tournament_url']
             is_pr_eligible = cleaned_data['is_pr_eligible']
-            print(tournament_url)
+            run_in_background = cleaned_data.get('run_in_background', False)
+            print(f"Adding tournament: {tournament_url} (Background: {run_in_background})")
 
-            return enter_tournament(tournament_url, is_pr_eligible)
-
+            if run_in_background:
+                # Spawn a background thread for massive tournaments
+                thread = threading.Thread(
+                    target=enter_tournament_async, 
+                    args=(tournament_url, is_pr_eligible)
+                )
+                thread.start()
+                messages.success(request, "Large tournament download started in the background. Check the Tournaments list or Sync Error Logs in a few minutes.")
+                return redirect('tournaments')
+            else:
+                # Run synchronously for normal tournaments
+                try:
+                    return enter_tournament(tournament_url, is_pr_eligible)
+                except Exception as e:
+                    messages.error(request, f"Error: {str(e)}")
+                    context = {'form': form}
+                    return render(request, 'main/tournament_form.html', context)
 
     else:
         context = {'form': TournamentForm()}

@@ -9,6 +9,9 @@ main/migrations/__pycache__/
 *.py[cod]
 .claude/
 
+# Claude Code worktrees
+.claude/worktrees/
+
 # Sandbox and Backups
 .env.sandbox
 backups/

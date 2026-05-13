@@ -199,6 +199,7 @@ class Tournament(models.Model):
     online = models.BooleanField(blank=True, null=True)
     type = models.CharField(blank=True, null=True)
     city = models.CharField(blank=True, null=True)
+    slug = models.CharField(max_length=255, blank=True, null=True)
 
     def __str__(self):
         return self.name
@@ -226,5 +227,21 @@ class TournamentResults(models.Model):
         managed = False
         db_table = 'tournament_results'
         unique_together = (('tournament', 'player_id'),)
+
+
+class SyncErrorLog(models.Model):
+    timestamp = models.DateTimeField(auto_now_add=True)
+    tournament_name = models.CharField(max_length=255, blank=True, null=True)
+    tournament_slug = models.CharField(max_length=255, blank=True, null=True)
+    tournament_url = models.URLField(max_length=500, blank=True, null=True)
+    error_message = models.TextField()
+    is_resolved = models.BooleanField(default=False)
+
+    def __str__(self):
+        return f"[{self.timestamp.strftime('%Y-%m-%d %H:%M')}] Error parsing {self.tournament_name or self.tournament_slug}"
+
+    class Meta:
+        db_table = 'sync_error_log'
+        ordering = ['-timestamp']
 
 

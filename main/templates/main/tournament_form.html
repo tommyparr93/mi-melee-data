@@ -3,6 +3,15 @@
 {% block content %}
 {% if user.is_superuser %}
 <h1>Tournament Form</h1>
+
+{% if messages %}
+    {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} mt-3">
+            {{ message }}
+        </div>
+    {% endfor %}
+{% endif %}
+
 <form action = "" method = "post">
     {% csrf_token %}
     {{form }}
