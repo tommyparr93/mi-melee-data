@@ -57,9 +57,9 @@
                     <tr>
                         <th>Tournament</th>
                         <th>Date</th>
-                        <th>Location</th>
+                        <th>City</th>
                         <th>Entrants</th>
-                        <th>Action</th>
+                        <th>Start.gg</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -70,7 +70,7 @@
                         <td>{{ tournament.city|default:"-" }}</td>
                         <td>{{ tournament.entrant_count }}</td>
                         <td>
-                            <a href="{% url 'tournament_details' tournament.pk %}" class="btn btn-sm btn-link">View Details</a>
+                            <a href="https://www.start.gg/tournament/{{ tournament.slug }}" target="_blank" class="btn btn-sm btn-outline-info">View on Start.gg</a>
                         </td>
                     </tr>
                     {% empty %}

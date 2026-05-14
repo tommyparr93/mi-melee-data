@@ -1,0 +1,283 @@
+<!-- Filters -->
+<div class="card shadow-sm mb-4">
+    <div class="card-body py-2">
+        <div class="row align-items-center g-2 flex-wrap">
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">PR Season</label>
+            </div>
+            <div class="col-auto">
+                <select id="rec-season-filter" class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_records' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-rec-filter]"
+                        name="season" data-rec-filter>
+                    <option value="all" {% if not selected_season %}selected{% endif %}>All time</option>
+                    {% for s in available_seasons %}
+                        <option value="{{ s.id }}" {% if selected_season == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto ms-2">
+                <label class="col-form-label col-form-label-sm text-muted">Year</label>
+            </div>
+            <div class="col-auto">
+                <select id="rec-year-filter" class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_records' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-rec-filter]"
+                        name="year" data-rec-filter>
+                    <option value="all" {% if not selected_year %}selected{% endif %}>All years</option>
+                    {% for y in available_years %}
+                        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_season or selected_year %}
+            <div class="col-auto ms-auto">
+                <a hx-get="{% url 'analytics_records' %}" hx-target="#analytics-content"
+                   class="btn btn-sm btn-outline-secondary" style="cursor:pointer;">Clear filters</a>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Row 1: Rivalries + Win Streaks + Most Sets -->
+<div class="row g-4 mb-4">
+    <!-- Top Rivalries -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Top Rivalries</h5>
+                <small class="text-muted">Most-played matchups</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 small">Players</th>
+                            <th class="text-center small">Record</th>
+                            <th class="text-center small">Meetings</th>
+                            <th class="pe-3"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in rivalries %}
+                        <tr {% if forloop.counter == 1 %}style="background:#fffbeb;"{% elif forloop.counter == 2 %}style="background:#f8f9fa;"{% elif forloop.counter == 3 %}style="background:#fdf5e6;"{% endif %}>
+                            <td class="ps-3">
+                                <a href="{% url 'player_detail' r.player_a.id %}" class="text-decoration-none fw-bold text-primary d-block {% if forloop.first %}fs-6{% endif %}">{{ r.player_a.name }}</a>
+                                <a href="{% url 'player_detail' r.player_b.id %}" class="text-decoration-none fw-bold text-primary d-block {% if forloop.first %}fs-6{% endif %}">{{ r.player_b.name }}</a>
+                            </td>
+                            <td class="text-center small">
+                                <span class="text-success fw-bold">{{ r.a_wins }}</span>
+                                <span class="text-muted">–</span>
+                                <span class="text-danger fw-bold">{{ r.b_wins }}</span>
+                            </td>
+                            <td class="text-center">
+                                {% if forloop.counter == 1 %}
+                                <span class="badge bg-warning text-dark">{{ r.meetings }}</span>
+                                {% elif forloop.counter == 2 %}
+                                <span class="badge" style="background:#adb5bd; color:white;">{{ r.meetings }}</span>
+                                {% elif forloop.counter == 3 %}
+                                <span class="badge" style="background:#cd7f32; color:white;">{{ r.meetings }}</span>
+                                {% else %}
+                                <span class="badge bg-secondary">{{ r.meetings }}</span>
+                                {% endif %}
+                            </td>
+                            <td class="pe-3 text-end">
+                                <a href="{% url 'analytics' %}?tab=h2h&p1={{ r.player_a.id }}&p2={{ r.player_b.id }}"
+                                   class="btn btn-outline-primary" style="font-size:0.7rem; padding:2px 6px;">H2H</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Best Win Streaks -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Best Win Streaks</h5>
+                <small class="text-muted">Best-ever consecutive wins</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 small">#</th>
+                            <th class="small">Player</th>
+                            <th class="text-end pe-3 small">Streak</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for s in streaks %}
+                        <tr {% if forloop.counter == 1 %}style="background:#fffbeb;"{% elif forloop.counter == 2 %}style="background:#f8f9fa;"{% elif forloop.counter == 3 %}style="background:#fdf5e6;"{% endif %}>
+                            <td class="ps-3">
+                                {% if forloop.counter == 1 %}<span class="fw-bold" style="color:#b8860b;">1</span>
+                                {% elif forloop.counter == 2 %}<span class="fw-semibold" style="color:#6c757d;">2</span>
+                                {% elif forloop.counter == 3 %}<span class="fw-semibold" style="color:#cd7f32;">3</span>
+                                {% else %}<span class="text-muted small">{{ forloop.counter }}</span>{% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'player_detail' s.player.id %}" class="text-decoration-none fw-bold {% if forloop.first %}fs-6{% endif %}">{{ s.player.name }}</a>
+                            </td>
+                            <td class="text-end pe-3">
+                                {% if forloop.counter == 1 %}<span class="badge bg-warning text-dark">{{ s.streak }}</span>
+                                {% elif forloop.counter == 2 %}<span class="badge" style="background:#adb5bd; color:white;">{{ s.streak }}</span>
+                                {% elif forloop.counter == 3 %}<span class="badge" style="background:#cd7f32; color:white;">{{ s.streak }}</span>
+                                {% else %}<span class="badge bg-primary">{{ s.streak }}</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Most Sets Played -->
+    <div class="col-lg-3">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Most Sets Played</h5>
+                <small class="text-muted">All players</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 small">#</th>
+                            <th class="small">Player</th>
+                            <th class="text-end pe-3 small">Sets</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in most_sets_table %}
+                        <tr {% if forloop.counter == 1 %}style="background:#fffbeb;"{% elif forloop.counter == 2 %}style="background:#f8f9fa;"{% elif forloop.counter == 3 %}style="background:#fdf5e6;"{% endif %}>
+                            <td class="ps-3">
+                                {% if forloop.counter == 1 %}<span class="fw-bold" style="color:#b8860b;">1</span>
+                                {% elif forloop.counter == 2 %}<span class="fw-semibold" style="color:#6c757d;">2</span>
+                                {% elif forloop.counter == 3 %}<span class="fw-semibold" style="color:#cd7f32;">3</span>
+                                {% else %}<span class="text-muted small">{{ forloop.counter }}</span>{% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'player_detail' row.player.id %}" class="text-decoration-none fw-bold {% if forloop.first %}fs-6{% endif %}">{{ row.player.name }}</a>
+                            </td>
+                            <td class="text-end pe-3">
+                                {% if forloop.counter == 1 %}<span class="badge bg-warning text-dark">{{ row.sets }}</span>
+                                {% elif forloop.counter == 2 %}<span class="badge" style="background:#adb5bd; color:white;">{{ row.sets }}</span>
+                                {% elif forloop.counter == 3 %}<span class="badge" style="background:#cd7f32; color:white;">{{ row.sets }}</span>
+                                {% else %}<span class="badge bg-success">{{ row.sets }}</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Row 2: Tournaments Attended + Biggest Events -->
+<div class="row g-4 mb-4">
+    <!-- Tournaments Attended -->
+    <div class="col-lg-4">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Tournaments Attended</h5>
+                <small class="text-muted">All players by distinct events</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 small">#</th>
+                            <th class="small">Player</th>
+                            <th class="text-end pe-3 small">Events</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in most_tourneys_table %}
+                        <tr {% if forloop.counter == 1 %}style="background:#fffbeb;"{% elif forloop.counter == 2 %}style="background:#f8f9fa;"{% elif forloop.counter == 3 %}style="background:#fdf5e6;"{% endif %}>
+                            <td class="ps-3">
+                                {% if forloop.counter == 1 %}<span class="fw-bold" style="color:#b8860b;">1</span>
+                                {% elif forloop.counter == 2 %}<span class="fw-semibold" style="color:#6c757d;">2</span>
+                                {% elif forloop.counter == 3 %}<span class="fw-semibold" style="color:#cd7f32;">3</span>
+                                {% else %}<span class="text-muted small">{{ forloop.counter }}</span>{% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'player_detail' row.player.id %}" class="text-decoration-none fw-bold {% if forloop.first %}fs-6{% endif %}">{{ row.player.name }}</a>
+                            </td>
+                            <td class="text-end pe-3">
+                                {% if forloop.counter == 1 %}<span class="badge bg-warning text-dark">{{ row.tournaments }}</span>
+                                {% elif forloop.counter == 2 %}<span class="badge" style="background:#adb5bd; color:white;">{{ row.tournaments }}</span>
+                                {% elif forloop.counter == 3 %}<span class="badge" style="background:#cd7f32; color:white;">{{ row.tournaments }}</span>
+                                {% else %}<span class="badge bg-info text-dark">{{ row.tournaments }}</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Biggest Events -->
+    <div class="col-lg-8">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Biggest Events</h5>
+                <small class="text-muted">By attendance{% if selected_season %} — selected season{% elif selected_year %}, {{ selected_year }}{% endif %}</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3 small">#</th>
+                            <th class="small">Tournament</th>
+                            <th class="text-end pe-3 small">Entrants</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for e in top_events %}
+                        <tr {% if forloop.counter == 1 %}style="background:#fffbeb;"{% elif forloop.counter == 2 %}style="background:#f8f9fa;"{% elif forloop.counter == 3 %}style="background:#fdf5e6;"{% endif %}>
+                            <td class="ps-3">
+                                {% if forloop.counter == 1 %}<span class="fw-bold" style="color:#b8860b;">1</span>
+                                {% elif forloop.counter == 2 %}<span class="fw-semibold" style="color:#6c757d;">2</span>
+                                {% elif forloop.counter == 3 %}<span class="fw-semibold" style="color:#cd7f32;">3</span>
+                                {% else %}<span class="text-muted small">{{ forloop.counter }}</span>{% endif %}
+                            </td>
+                            <td>
+                                <a href="{% url 'tournament_details' e.id %}" class="text-decoration-none fw-bold d-block {% if forloop.first %}fs-6{% endif %}">{{ e.name }}</a>
+                                <small class="text-muted">{{ e.date }}{% if e.city %} · {{ e.city }}{% endif %}</small>
+                            </td>
+                            <td class="text-end pe-3">
+                                {% if forloop.counter == 1 %}<span class="badge bg-warning text-dark">{{ e.entrant_count }}</span>
+                                {% elif forloop.counter == 2 %}<span class="badge" style="background:#adb5bd; color:white;">{{ e.entrant_count }}</span>
+                                {% elif forloop.counter == 3 %}<span class="badge" style="background:#cd7f32; color:white;">{{ e.entrant_count }}</span>
+                                {% else %}<span class="badge bg-primary">{{ e.entrant_count }}</span>{% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="3" class="text-center text-muted py-3 small">No events found.</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+document.getElementById('rec-season-filter').addEventListener('change', function() {
+    if (this.value !== 'all') document.getElementById('rec-year-filter').value = 'all';
+});
+document.getElementById('rec-year-filter').addEventListener('change', function() {
+    if (this.value !== 'all') document.getElementById('rec-season-filter').value = 'all';
+});
+</script>

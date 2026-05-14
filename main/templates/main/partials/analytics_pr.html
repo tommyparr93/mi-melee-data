@@ -78,21 +78,10 @@
     </div>
 </div>
 
-<!-- Charts Row 2: Tournaments per Year + PR History -->
-<div class="row g-4 mb-4">
-    <div class="col-lg-5">
-        <div class="card shadow-sm h-100">
-            <div class="card-header bg-white">
-                <h5 class="mb-0">Tournaments per Year</h5>
-                <small class="text-muted">In-person Michigan tournaments</small>
-            </div>
-            <div class="card-body">
-                <canvas id="tournamentsPerYearChart" height="280"></canvas>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-7">
-        <div class="card shadow-sm h-100">
+<!-- PR History Chart -->
+<div class="row g-4 mb-4" id="pr-history-row">
+    <div class="col-12">
+        <div class="card shadow-sm">
             <div class="card-header bg-white">
                 <h5 class="mb-0">PR Rank Movement Across Seasons</h5>
                 <small class="text-muted">Players appearing in 2+ seasons — rank 1 at top</small>
@@ -106,15 +95,13 @@
 
 <script id="win-rate-data" type="application/json">{{ win_rate_data|safe }}</script>
 <script id="activity-data" type="application/json">{{ activity_data|safe }}</script>
-<script id="tournaments-per-year-data" type="application/json">{{ tournaments_per_year_data|safe }}</script>
 <script id="pr-history-data" type="application/json">{{ pr_history_data|safe }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-(function () {
+function initPRCharts() {
     const parse = (id) => JSON.parse(document.getElementById(id).textContent);
     const winRateData = parse('win-rate-data');
     const activityData = parse('activity-data');
-    const perYearData = parse('tournaments-per-year-data');
     const prHistory = parse('pr-history-data');
 
     const palette = ['#0d6efd','#dc3545','#198754','#ffc107','#6610f2','#fd7e14','#20c997','#d63384','#0dcaf0','#6c757d','#0d6efd','#dc3545','#198754','#ffc107','#6610f2'];
@@ -165,19 +152,6 @@
     });
     makeClickable(activityChart, activityIds);
 
-    new Chart(document.getElementById('tournamentsPerYearChart'), {
-        type: 'bar',
-        data: {
-            labels: perYearData.map(d => d.year),
-            datasets: [{ label: 'Tournaments', data: perYearData.map(d => d.count), backgroundColor: '#fd7e14' }]
-        },
-        options: {
-            responsive: true, maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: { y: { beginAtZero: true } }
-        }
-    });
-
     const prDatasets = prHistory.players.map((p, i) => ({
         label: p.name, data: p.ranks,
         borderColor: palette[i % palette.length], backgroundColor: palette[i % palette.length],
@@ -192,5 +166,80 @@
             scales: { y: { reverse: true, beginAtZero: false, title: { display: true, text: 'Rank' }, ticks: { stepSize: 1 } } }
         }
     });
-})();
+}
+
+if (window.Chart) {
+    initPRCharts();
+} else {
+    document.querySelector('script[src*="chart.js@4.4.0"]').addEventListener('load', initPRCharts);
+}
 </script>
+
+{% if h2h_table_data %}
+<!-- PR H2H Matrix -->
+<div class="row g-4 mt-0">
+    <div class="col-12">
+        <div class="card shadow-sm">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">PR Head-to-Head Matrix</h5>
+                <small class="text-muted">
+                    {{ pr_table_season_name }} — PR-eligible players only · row player's record vs column player
+                </small>
+            </div>
+            <div class="card-body p-0">
+                <style>
+                    .pr-mat-wrap { overflow-x: auto; overflow-y: auto; max-height: 620px; }
+                    .pr-mat { font-size: 0.75rem; min-width: max-content; }
+                    .pr-mat thead th { position: sticky; top: 0; background: #f8f9fa; z-index: 3; border-bottom: 2px solid #dee2e6; white-space: nowrap; }
+                    .pr-mat .pr-row-label { position: sticky; left: 0; background: #f8f9fa !important; z-index: 2; border-right: 2px solid #dee2e6; font-weight: 600; white-space: nowrap; min-width: 120px; }
+                    .pr-mat thead .pr-row-label { z-index: 4; }
+                    .pr-mat .pr-total { position: sticky; right: 0; background: #e9ecef !important; border-left: 2px solid #dee2e6; font-weight: 700; z-index: 2; }
+                    .pr-mat thead .pr-total { z-index: 4; }
+                    .pr-cell { text-align: center; vertical-align: middle !important; min-width: 58px; }
+                    .pr-cell-win  { background: #d1e7dd !important; }
+                    .pr-cell-loss { background: #f8d7da !important; }
+                    .pr-cell-even { background: #cff4fc !important; }
+                    .pr-cell-none { color: #adb5bd; }
+                </style>
+                <div class="pr-mat-wrap">
+                    <table class="table table-sm table-bordered mb-0 pr-mat">
+                        <thead>
+                            <tr>
+                                <th class="pr-row-label ps-3">Row wins vs →</th>
+                                {% for p in pr_players %}
+                                <th class="pr-cell">
+                                    <a href="{% url 'player_detail' p.id %}" class="text-decoration-none text-dark">{{ p.name }}</a>
+                                </th>
+                                {% endfor %}
+                                <th class="pr-total text-center">W</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in h2h_table_data %}
+                            <tr>
+                                <td class="pr-row-label ps-3">
+                                    <a href="{% url 'player_detail' row.player.id %}" class="text-decoration-none">{{ row.player.name }}</a>
+                                </td>
+                                {% for cell in row.cells %}
+                                <td class="pr-cell
+                                    {% if cell.diag %}table-secondary
+                                    {% elif not cell.played %}pr-cell-none
+                                    {% elif cell.wins > cell.losses %}pr-cell-win
+                                    {% elif cell.wins < cell.losses %}pr-cell-loss
+                                    {% else %}pr-cell-even{% endif %}">
+                                    {% if cell.diag %}—
+                                    {% elif not cell.played %}—
+                                    {% else %}<a href="{% url 'analytics' %}?tab=h2h&p1={{ row.player.id }}&p2={{ cell.col_player_id }}" class="text-decoration-none text-dark"><b>{{ cell.wins }}–{{ cell.losses }}</b></a>{% endif %}
+                                </td>
+                                {% endfor %}
+                                <td class="pr-total text-center">{{ row.total_wins }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}

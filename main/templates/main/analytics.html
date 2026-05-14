@@ -11,12 +11,12 @@
 
 <!-- Tab Nav -->
 <div class="d-flex gap-2 mb-4">
-    <button id="btn-general"
-            class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'general' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
-            hx-get="{% url 'analytics_general' %}"
+    <button id="btn-records"
+            class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'records' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
+            hx-get="{% url 'analytics_records' %}"
             hx-target="#analytics-content"
-            hx-push-url="{% url 'analytics' %}?tab=general">
-        General
+            hx-push-url="{% url 'analytics' %}?tab=records">
+        Records
     </button>
     <button id="btn-pr"
             class="btn btn-lg flex-grow-1 shadow-sm tab-btn {% if active_tab == 'pr' %}btn-primary text-white active{% else %}btn-outline-primary{% endif %}"
@@ -34,22 +34,20 @@
     </button>
 </div>
 
-<!-- Tab Content (loaded via HTMX) -->
-<div id="analytics-content">
-    {% if active_tab == 'general' %}
-        {% include 'main/partials/analytics_general.html' %}
-    {% elif active_tab == 'pr' %}
-        {% include 'main/partials/analytics_pr.html' %}
-    {% elif active_tab == 'h2h' %}
-        {% include 'main/partials/analytics_h2h.html' %}
-    {% endif %}
+<!-- Tab Content — auto-loaded via HTMX on page load -->
+<div id="analytics-content"
+     hx-get="{{ initial_tab_url }}"
+     hx-trigger="load">
+    <div class="text-center py-5">
+        <div class="spinner-border spinner-border-sm text-secondary" role="status"></div>
+    </div>
 </div>
 
 <script>
 document.body.addEventListener('htmx:afterOnLoad', function(evt) {
     if (evt.detail.target.id === 'analytics-content') {
         const url = new URL(window.location.href);
-        const tab = url.searchParams.get('tab') || 'general';
+        const tab = url.searchParams.get('tab') || 'records';
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.classList.remove('btn-primary', 'text-white', 'active');
             btn.classList.add('btn-outline-primary');
@@ -60,6 +58,13 @@ document.body.addEventListener('htmx:afterOnLoad', function(evt) {
             active.classList.add('btn-primary', 'text-white', 'active');
         }
     }
+});
+
+document.getElementById('btn-h2h').addEventListener('htmx:configRequest', function(evt) {
+    const p1 = localStorage.getItem('h2h_p1') || '36330';
+    const p2 = localStorage.getItem('h2h_p2') || '6972';
+    evt.detail.parameters.p1 = p1;
+    evt.detail.parameters.p2 = p2;
 });
 </script>
 {% endblock %}

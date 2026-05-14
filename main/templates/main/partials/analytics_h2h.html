@@ -1,10 +1,10 @@
-<!-- Player Picker -->
+<!-- Player Picker + Season Filter -->
 <div class="card shadow-sm mb-4">
     <div class="card-body">
-        <h5 class="mb-3">Compare Two Players</h5>
-        <div class="row g-3">
+        <h5 class="mb-3">Compare Players</h5>
+        <div class="row g-3 align-items-end">
             <!-- Player 1 -->
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label small text-muted fw-bold text-uppercase" style="font-size:0.7rem;">Player 1</label>
                 <div class="position-relative">
                     <input type="text" id="p1-name" class="form-control"
@@ -16,17 +16,17 @@
                            hx-target="#p1-dropdown"
                            hx-include="#p1-name"
                            name="q">
-                    <input type="hidden" id="p1-id" name="p1" value="{% if p1 %}{{ p1.id }}{% endif %}">
+                    <input type="hidden" id="p1-id" value="{% if p1 %}{{ p1.id }}{% endif %}">
                     <div id="p1-dropdown" class="position-absolute w-100 shadow bg-white rounded-bottom border" style="z-index:1050; top:100%;"></div>
                 </div>
             </div>
 
-            <div class="col-md-2 d-flex align-items-end justify-content-center pb-1">
+            <div class="col-md-1 d-flex justify-content-center pb-1">
                 <span class="fw-bold text-muted fs-4">vs</span>
             </div>
 
             <!-- Player 2 -->
-            <div class="col-md-5">
+            <div class="col-md-4">
                 <label class="form-label small text-muted fw-bold text-uppercase" style="font-size:0.7rem;">Player 2</label>
                 <div class="position-relative">
                     <input type="text" id="p2-name" class="form-control"
@@ -38,13 +38,63 @@
                            hx-target="#p2-dropdown"
                            hx-include="#p2-name"
                            name="q">
-                    <input type="hidden" id="p2-id" name="p2" value="{% if p2 %}{{ p2.id }}{% endif %}">
+                    <input type="hidden" id="p2-id" value="{% if p2 %}{{ p2.id }}{% endif %}">
                     <div id="p2-dropdown" class="position-absolute w-100 shadow bg-white rounded-bottom border" style="z-index:1050; top:100%;"></div>
                 </div>
             </div>
+
+            <!-- Optional Player 3 -->
+            <div class="col-md-3">
+                <label class="form-label small text-muted fw-bold text-uppercase" style="font-size:0.7rem;">
+                    3rd Player <span class="text-muted fw-normal">(optional)</span>
+                </label>
+                {% if p3 %}
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-success fs-6 py-2 px-3">{{ p3.name }}</span>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="removeP3()">×</button>
+                </div>
+                <input type="hidden" id="p3-id" value="{{ p3.id }}">
+                {% else %}
+                <div class="position-relative">
+                    <input type="text" id="p3-name" class="form-control"
+                           placeholder="Optional 3rd player..."
+                           autocomplete="off"
+                           hx-get="{% url 'analytics_player_search' %}?num=3"
+                           hx-trigger="keyup changed delay:250ms"
+                           hx-target="#p3-dropdown"
+                           hx-include="#p3-name"
+                           name="q">
+                    <input type="hidden" id="p3-id" value="">
+                    <div id="p3-dropdown" class="position-absolute w-100 shadow bg-white rounded-bottom border" style="z-index:1050; top:100%;"></div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Season filter row -->
+        <div class="row g-2 align-items-center mt-3 pt-3 border-top">
+            <div class="col-auto">
+                <label class="col-form-label col-form-label-sm text-muted">Filter by PR Season</label>
+            </div>
+            <div class="col-auto">
+                <select id="h2h-season" class="form-select form-select-sm" onchange="triggerH2HReload()">
+                    <option value="">All time</option>
+                    {% for s in available_seasons %}
+                        <option value="{{ s.id }}" {% if selected_season == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if selected_season %}
+            <div class="col-auto">
+                <span class="badge bg-info text-dark">Season filtered — chart shows monthly win rate</span>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Hidden state for extra pinned opponents -->
+<input type="hidden" id="extra-ids" value="{{ extra_str }}">
 
 {% if p1 and p2 %}
 
@@ -53,7 +103,10 @@
     <div class="card-body">
         <div class="row text-center align-items-center">
             <div class="col">
-                <a href="{% url 'player_detail' p1.id %}" class="text-decoration-none">
+                <a href="{% url 'player_detail' p1.id %}" class="text-decoration-none d-flex flex-column align-items-center gap-1">
+                    {% if p1.main_char and p1.main_char.icon_path %}
+                    <img src="{{ p1.main_char.icon_path }}" alt="{{ p1.main_char.name }}" style="width:48px; height:48px; object-fit:contain;">
+                    {% endif %}
                     <h3 class="fw-bold text-primary mb-0">{{ p1.name }}</h3>
                 </a>
             </div>
@@ -66,17 +119,18 @@
                 <div class="small text-muted mt-1">{{ direct_total }} set{{ direct_total|pluralize }} head-to-head</div>
             </div>
             <div class="col">
-                <a href="{% url 'player_detail' p2.id %}" class="text-decoration-none">
+                <a href="{% url 'player_detail' p2.id %}" class="text-decoration-none d-flex flex-column align-items-center gap-1">
+                    {% if p2.main_char and p2.main_char.icon_path %}
+                    <img src="{{ p2.main_char.icon_path }}" alt="{{ p2.main_char.name }}" style="width:48px; height:48px; object-fit:contain;">
+                    {% endif %}
                     <h3 class="fw-bold text-primary mb-0">{{ p2.name }}</h3>
                 </a>
             </div>
         </div>
         {% if direct_total > 0 %}
         <div class="progress mt-3" style="height: 8px; border-radius: 4px;">
-            {% with pct=p1_direct_wins|floatformat:0 %}
             <div class="progress-bar bg-primary" style="width: {% widthratio p1_direct_wins direct_total 100 %}%"></div>
             <div class="progress-bar bg-danger" style="width: {% widthratio p2_direct_wins direct_total 100 %}%"></div>
-            {% endwith %}
         </div>
         {% endif %}
     </div>
@@ -93,39 +147,46 @@
                         <tr>
                             <th class="ps-3 text-primary">{{ p1.name }}</th>
                             <th class="text-center text-muted small"></th>
-                            <th class="text-end pe-3 text-danger">{{ p2.name }}</th>
+                            <th class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %} text-danger">{{ p2.name }}</th>
+                            {% if p3 %}<th class="text-end pe-3" style="color:#198754;">{{ p3.name }}</th>{% endif %}
                         </tr>
                     </thead>
                     <tbody>
                         <tr>
                             <td class="ps-3 fw-bold {% if p1_stats.win_rate >= p2_stats.win_rate %}text-success{% endif %}">{{ p1_stats.win_rate }}%</td>
                             <td class="text-center text-muted small">Win Rate</td>
-                            <td class="text-end pe-3 fw-bold {% if p2_stats.win_rate > p1_stats.win_rate %}text-success{% endif %}">{{ p2_stats.win_rate }}%</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %} fw-bold {% if p2_stats.win_rate > p1_stats.win_rate %}text-success{% endif %}">{{ p2_stats.win_rate }}%</td>
+                            {% if p3 %}<td class="text-end pe-3 fw-bold {% if p3_stats.win_rate > p1_stats.win_rate and p3_stats.win_rate > p2_stats.win_rate %}text-success{% endif %}">{{ p3_stats.win_rate }}%</td>{% endif %}
                         </tr>
                         <tr>
                             <td class="ps-3 fw-bold {% if p1_stats.total >= p2_stats.total %}text-success{% endif %}">{{ p1_stats.total }}</td>
                             <td class="text-center text-muted small">Total Sets</td>
-                            <td class="text-end pe-3 fw-bold {% if p2_stats.total > p1_stats.total %}text-success{% endif %}">{{ p2_stats.total }}</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %} fw-bold {% if p2_stats.total > p1_stats.total %}text-success{% endif %}">{{ p2_stats.total }}</td>
+                            {% if p3 %}<td class="text-end pe-3 fw-bold {% if p3_stats.total > p1_stats.total and p3_stats.total > p2_stats.total %}text-success{% endif %}">{{ p3_stats.total }}</td>{% endif %}
                         </tr>
                         <tr>
                             <td class="ps-3">{{ p1_stats.wins }} W / {{ p1_stats.losses }} L</td>
                             <td class="text-center text-muted small">Record</td>
-                            <td class="text-end pe-3">{{ p2_stats.wins }} W / {{ p2_stats.losses }} L</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %}">{{ p2_stats.wins }} W / {{ p2_stats.losses }} L</td>
+                            {% if p3 %}<td class="text-end pe-3">{{ p3_stats.wins }} W / {{ p3_stats.losses }} L</td>{% endif %}
                         </tr>
                         <tr>
                             <td class="ps-3 fw-bold {% if p1_stats.tournaments >= p2_stats.tournaments %}text-success{% endif %}">{{ p1_stats.tournaments }}</td>
                             <td class="text-center text-muted small">Tournaments</td>
-                            <td class="text-end pe-3 fw-bold {% if p2_stats.tournaments > p1_stats.tournaments %}text-success{% endif %}">{{ p2_stats.tournaments }}</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %} fw-bold {% if p2_stats.tournaments > p1_stats.tournaments %}text-success{% endif %}">{{ p2_stats.tournaments }}</td>
+                            {% if p3 %}<td class="text-end pe-3 fw-bold {% if p3_stats.tournaments > p1_stats.tournaments and p3_stats.tournaments > p2_stats.tournaments %}text-success{% endif %}">{{ p3_stats.tournaments }}</td>{% endif %}
                         </tr>
                         <tr>
                             <td class="ps-3">{% if p1_stats.current_pr %}#{{ p1_stats.current_pr.rank }}{% else %}—{% endif %}</td>
                             <td class="text-center text-muted small">Current PR</td>
-                            <td class="text-end pe-3">{% if p2_stats.current_pr %}#{{ p2_stats.current_pr.rank }}{% else %}—{% endif %}</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %}">{% if p2_stats.current_pr %}#{{ p2_stats.current_pr.rank }}{% else %}—{% endif %}</td>
+                            {% if p3 %}<td class="text-end pe-3">{% if p3_stats.current_pr %}#{{ p3_stats.current_pr.rank }}{% else %}—{% endif %}</td>{% endif %}
                         </tr>
                         <tr>
                             <td class="ps-3">{% if p1_stats.best_rank %}#{{ p1_stats.best_rank }}{% else %}—{% endif %}</td>
                             <td class="text-center text-muted small">Best PR Ever</td>
-                            <td class="text-end pe-3">{% if p2_stats.best_rank %}#{{ p2_stats.best_rank }}{% else %}—{% endif %}</td>
+                            <td class="{% if p3 %}text-center{% else %}text-end pe-3{% endif %}">{% if p2_stats.best_rank %}#{{ p2_stats.best_rank }}{% else %}—{% endif %}</td>
+                            {% if p3 %}<td class="text-end pe-3">{% if p3_stats.best_rank %}#{{ p3_stats.best_rank }}{% else %}—{% endif %}</td>{% endif %}
                         </tr>
                     </tbody>
                 </table>
@@ -133,27 +194,43 @@
         </div>
     </div>
 
-    <!-- Win Rate by Year Chart -->
+    <!-- Win Rate Chart -->
     <div class="col-lg-7">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
-                <h5 class="mb-0">Win Rate by Year</h5>
-                <small class="text-muted">Overall win rate per year, all opponents</small>
+                <h5 class="mb-0">{{ chart_title }}</h5>
+                <small class="text-muted">Overall win rate, all opponents</small>
             </div>
             <div class="card-body">
-                <canvas id="yearlyChart" height="260"></canvas>
+                <canvas id="winRateChart" height="260"></canvas>
             </div>
         </div>
     </div>
 </div>
 
 <!-- Common Opponents -->
-{% if common_opponents %}
 <div class="card shadow-sm mb-4">
     <div class="card-header bg-white">
-        <h5 class="mb-0">Common Opponents</h5>
-        <small class="text-muted">Players both have faced — sorted by combined meetings</small>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div>
+                <h5 class="mb-0">Common Opponents</h5>
+                <small class="text-muted">Players {% if p3 %}all three{% else %}both{% endif %} have faced — sorted by combined meetings</small>
+            </div>
+            <!-- Add player to list -->
+            <div class="ms-auto position-relative" style="min-width:220px;">
+                <input type="text" id="extra-search" class="form-control form-control-sm"
+                       placeholder="Add any player to list..."
+                       autocomplete="off"
+                       hx-get="{% url 'analytics_player_search' %}?num=extra"
+                       hx-trigger="keyup changed delay:250ms"
+                       hx-target="#extra-dropdown"
+                       hx-include="#extra-search"
+                       name="q">
+                <div id="extra-dropdown" class="position-absolute shadow bg-white rounded-bottom border" style="z-index:1050; top:100%; min-width:220px;"></div>
+            </div>
+        </div>
     </div>
+    {% if common_opponents %}
     <div class="card-body p-0">
         <table class="table table-hover align-middle mb-0 small">
             <thead class="table-light">
@@ -161,14 +238,17 @@
                     <th class="ps-3">Opponent</th>
                     <th class="text-center">{{ p1.name }}</th>
                     <th class="text-center">{{ p2.name }}</th>
+                    {% if p3 %}<th class="text-center">{{ p3.name }}</th>{% endif %}
                     <th class="text-center">Advantage</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
                 {% for opp in common_opponents %}
-                <tr>
+                <tr {% if opp.is_pinned %}class="table-warning"{% endif %}>
                     <td class="ps-3">
                         <a href="{% url 'player_detail' opp.opponent.id %}" class="text-decoration-none fw-bold">{{ opp.opponent.name }}</a>
+                        {% if opp.is_pinned %}<span class="badge bg-warning text-dark ms-1" style="font-size:0.65rem;">pinned</span>{% endif %}
                     </td>
                     <td class="text-center">
                         <span class="{% if opp.p1_wr >= 50 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ opp.p1_w }}–{{ opp.p1_l }}</span>
@@ -178,13 +258,27 @@
                         <span class="{% if opp.p2_wr >= 50 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ opp.p2_w }}–{{ opp.p2_l }}</span>
                         <span class="text-muted small ms-1">({{ opp.p2_wr }}%)</span>
                     </td>
+                    {% if p3 %}
+                    <td class="text-center">
+                        <span class="{% if opp.p3_wr >= 50 %}text-success{% else %}text-danger{% endif %} fw-bold">{{ opp.p3_w }}–{{ opp.p3_l }}</span>
+                        <span class="text-muted small ms-1">({{ opp.p3_wr }}%)</span>
+                    </td>
+                    {% endif %}
                     <td class="text-center">
                         {% if opp.advantage == 'Even' %}
                             <span class="badge bg-secondary">Even</span>
                         {% elif opp.advantage == p1.name %}
                             <span class="badge bg-primary">{{ p1.name }}</span>
+                        {% elif p3 and opp.advantage == p3.name %}
+                            <span class="badge bg-success">{{ p3.name }}</span>
                         {% else %}
                             <span class="badge bg-danger">{{ p2.name }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="pe-2">
+                        {% if opp.is_pinned %}
+                        <button class="btn btn-xs btn-outline-secondary" style="font-size:0.65rem; padding:1px 5px;"
+                                onclick="removeFromExtraList({{ opp.opponent.id }})">×</button>
                         {% endif %}
                     </td>
                 </tr>
@@ -192,32 +286,39 @@
             </tbody>
         </table>
     </div>
+    {% else %}
+    <div class="card-body text-center text-muted py-3 small">No common opponents found. Use the search above to add players.</div>
+    {% endif %}
 </div>
-{% endif %}
 
-<script id="yearly-chart-data" type="application/json">{{ yearly_chart_data|safe }}</script>
+<script id="chart-data" type="application/json">{{ chart_data|safe }}</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-(function() {
-    const data = JSON.parse(document.getElementById('yearly-chart-data').textContent);
-    new Chart(document.getElementById('yearlyChart'), {
+function initWinRateChart() {
+    const data = JSON.parse(document.getElementById('chart-data').textContent);
+    const datasets = [
+        { label: '{{ p1.name|escapejs }}', data: data.p1, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.2, spanGaps: true },
+        { label: '{{ p2.name|escapejs }}', data: data.p2, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.2, spanGaps: true },
+    ];
+    {% if p3 %}
+    datasets.push({ label: '{{ p3.name|escapejs }}', data: data.p3, borderColor: '#198754', backgroundColor: 'rgba(25,135,84,0.1)', tension: 0.2, spanGaps: true });
+    {% endif %}
+    new Chart(document.getElementById('winRateChart'), {
         type: 'line',
-        data: {
-            labels: data.years,
-            datasets: [
-                { label: '{{ p1.name|escapejs }}', data: data.p1, borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.1)', tension: 0.2, spanGaps: true },
-                { label: '{{ p2.name|escapejs }}', data: data.p2, borderColor: '#dc3545', backgroundColor: 'rgba(220,53,69,0.1)', tension: 0.2, spanGaps: true },
-            ]
-        },
+        data: { labels: data.labels, datasets },
         options: {
             responsive: true, maintainAspectRatio: false,
             plugins: { legend: { position: 'top' } },
-            scales: {
-                y: { beginAtZero: true, max: 100, title: { display: true, text: 'Win Rate %' } }
-            }
+            scales: { y: { beginAtZero: true, max: 100, title: { display: true, text: 'Win Rate %' } } }
         }
     });
-})();
+}
+
+if (window.Chart) {
+    initWinRateChart();
+} else {
+    document.querySelector('script[src*="chart.js@4.4.0"]').addEventListener('load', initWinRateChart);
+}
 </script>
 
 {% else %}
@@ -227,27 +328,93 @@
 {% endif %}
 
 <script>
-// Player picker: fill hidden ID field and trigger comparison load when both selected
+function getCurrentState() {
+    return {
+        p1: (document.getElementById('p1-id') || {}).value || '',
+        p2: (document.getElementById('p2-id') || {}).value || '',
+        p3: (document.getElementById('p3-id') || {}).value || '',
+        season: (document.getElementById('h2h-season') || {}).value || '',
+        extra: (document.getElementById('extra-ids') || {}).value || '',
+    };
+}
+
+function buildH2HUrl(state) {
+    let url = '{% url "analytics_h2h" %}?p1=' + state.p1 + '&p2=' + state.p2;
+    if (state.p3) url += '&p3=' + state.p3;
+    if (state.season) url += '&season=' + state.season;
+    if (state.extra) url += '&extra=' + encodeURIComponent(state.extra);
+    return url;
+}
+
 function selectPlayer(num, id, name) {
+    if (num === 'extra') {
+        document.getElementById('extra-search').value = '';
+        document.getElementById('extra-dropdown').innerHTML = '';
+        addToExtraList(id);
+        return;
+    }
     document.getElementById('p' + num + '-name').value = name;
     document.getElementById('p' + num + '-id').value = id;
     document.getElementById('p' + num + '-dropdown').innerHTML = '';
+    const p1 = document.getElementById('p1-id').value;
+    const p2 = document.getElementById('p2-id').value;
+    if (p1) localStorage.setItem('h2h_p1', p1);
+    if (p2) localStorage.setItem('h2h_p2', p2);
     tryLoadComparison();
 }
 
 function tryLoadComparison() {
-    const p1 = document.getElementById('p1-id').value;
-    const p2 = document.getElementById('p2-id').value;
-    if (p1 && p2 && p1 !== p2) {
-        htmx.ajax('GET', '{% url "analytics_h2h" %}?p1=' + p1 + '&p2=' + p2, '#analytics-content');
+    const state = getCurrentState();
+    if (state.p1 && state.p2 && state.p1 !== state.p2) {
+        htmx.ajax('GET', buildH2HUrl(state), '#analytics-content');
     }
 }
 
-// Clear player ID when user edits the search box manually
-document.getElementById('p1-name').addEventListener('input', function() {
-    if (!this._selecting) document.getElementById('p1-id').value = '';
-});
-document.getElementById('p2-name').addEventListener('input', function() {
-    if (!this._selecting) document.getElementById('p2-id').value = '';
-});
+function triggerH2HReload() {
+    const state = getCurrentState();
+    if (state.p1 && state.p2) {
+        htmx.ajax('GET', buildH2HUrl(state), '#analytics-content');
+    }
+}
+
+function removeP3() {
+    const state = getCurrentState();
+    state.p3 = '';
+    if (state.p1 && state.p2) {
+        htmx.ajax('GET', buildH2HUrl(state), '#analytics-content');
+    }
+}
+
+function addToExtraList(id) {
+    const el = document.getElementById('extra-ids');
+    if (!el) return;
+    const current = el.value ? el.value.split(',').filter(Boolean) : [];
+    if (!current.includes(String(id))) {
+        current.push(String(id));
+        el.value = current.join(',');
+    }
+    tryLoadComparison();
+}
+
+function removeFromExtraList(id) {
+    const el = document.getElementById('extra-ids');
+    if (!el) return;
+    el.value = el.value.split(',').filter(x => x && x !== String(id)).join(',');
+    tryLoadComparison();
+}
+
+// Persist any pre-loaded players (e.g. arriving from a rivalry link)
+(function() {
+    const p1 = (document.getElementById('p1-id') || {}).value;
+    const p2 = (document.getElementById('p2-id') || {}).value;
+    if (p1) localStorage.setItem('h2h_p1', p1);
+    if (p2) localStorage.setItem('h2h_p2', p2);
+})();
+
+const p1Name = document.getElementById('p1-name');
+const p2Name = document.getElementById('p2-name');
+if (p1Name) p1Name.addEventListener('input', () => document.getElementById('p1-id').value = '');
+if (p2Name) p2Name.addEventListener('input', () => document.getElementById('p2-id').value = '');
+const p3Name = document.getElementById('p3-name');
+if (p3Name) p3Name.addEventListener('input', () => document.getElementById('p3-id').value = '');
 </script>

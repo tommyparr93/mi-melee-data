@@ -1,33 +1,55 @@
 <!-- Filters -->
 <div class="card shadow-sm mb-4">
     <div class="card-body py-2">
-        <div class="row align-items-center g-2">
+        <div class="row align-items-center g-2 flex-wrap">
             <div class="col-auto">
-                <label class="col-form-label col-form-label-sm text-muted">Year (top events)</label>
+                <label class="col-form-label col-form-label-sm text-muted">PR Season</label>
             </div>
             <div class="col-auto">
-                <select class="form-select form-select-sm"
+                <select id="general-season-filter" class="form-select form-select-sm"
                         hx-get="{% url 'analytics_general' %}"
                         hx-target="#analytics-content"
                         hx-trigger="change"
-                        hx-include="[data-filter]"
-                        name="year" data-filter>
-                    <option value="all" {% if not selected_year %}selected{% endif %}>All time</option>
+                        hx-include="[data-gen-filter]"
+                        name="season" data-gen-filter>
+                    <option value="all" {% if not selected_season %}selected{% endif %}>All time</option>
+                    {% for s in available_seasons %}
+                        <option value="{{ s.id }}" {% if selected_season == s.id %}selected{% endif %}>{{ s.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-auto ms-2">
+                <label class="col-form-label col-form-label-sm text-muted">Year</label>
+            </div>
+            <div class="col-auto">
+                <select id="general-year-filter" class="form-select form-select-sm"
+                        hx-get="{% url 'analytics_general' %}"
+                        hx-target="#analytics-content"
+                        hx-trigger="change"
+                        hx-include="[data-gen-filter]"
+                        name="year" data-gen-filter>
+                    <option value="all" {% if not selected_year %}selected{% endif %}>All years</option>
                     {% for y in available_years %}
                         <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
                     {% endfor %}
                 </select>
             </div>
+            {% if selected_season or selected_year %}
+            <div class="col-auto ms-auto">
+                <a hx-get="{% url 'analytics_general' %}" hx-target="#analytics-content"
+                   class="btn btn-sm btn-outline-secondary" style="cursor:pointer;">Clear filters</a>
+            </div>
+            {% endif %}
         </div>
     </div>
 </div>
 
 <!-- Stat Cards -->
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #0d6efd !important;">
             <div class="card-body text-center p-4">
-                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Longest Win Streak Ever</div>
+                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Longest Win Streak</div>
                 {% if top_streak %}
                     <h2 class="display-6 fw-bold text-primary mb-1">{{ top_streak.streak }}</h2>
                     <div class="small">
@@ -39,22 +61,7 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
-        <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #198754 !important;">
-            <div class="card-body text-center p-4">
-                <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Most Sets Played All-Time</div>
-                {% if most_sets_player %}
-                    <h2 class="display-6 fw-bold text-success mb-1">{{ most_sets_count }}</h2>
-                    <div class="small">
-                        <a href="{% url 'player_detail' most_sets_player.id %}" class="text-decoration-none fw-bold">{{ most_sets_player.name }}</a>
-                    </div>
-                {% else %}
-                    <span class="text-muted">No data</span>
-                {% endif %}
-            </div>
-        </div>
-    </div>
-    <div class="col-md-4">
+    <div class="col-md-6">
         <div class="card shadow-sm h-100 border-0" style="border-radius:12px; border-left: 4px solid #dc3545 !important;">
             <div class="card-body text-center p-4">
                 <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size:0.7rem; letter-spacing:1px;">Biggest Rivalry</div>
@@ -74,14 +81,14 @@
     </div>
 </div>
 
-<!-- Bottom row: Rivalries + Streaks + Top Events -->
-<div class="row g-4">
+<!-- Tables Row: Rivalries + Streaks + Most Sets -->
+<div class="row g-4 mb-4">
     <!-- Top Rivalries -->
     <div class="col-lg-5">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
                 <h5 class="mb-0">Top Rivalries</h5>
-                <small class="text-muted">Most-played matchups, all time</small>
+                <small class="text-muted">Most-played matchups</small>
             </div>
             <div class="card-body p-0">
                 <table class="table table-hover align-middle mb-0 small">
@@ -89,23 +96,28 @@
                         <tr>
                             <th class="ps-3">Players</th>
                             <th class="text-center">Record</th>
-                            <th class="text-end pe-3">Meetings</th>
+                            <th class="text-center">Meetings</th>
+                            <th class="pe-3"></th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for r in rivalries %}
                         <tr>
                             <td class="ps-3">
-                                <a href="{% url 'player_detail' r.player_a.id %}" class="text-decoration-none fw-bold d-block">{{ r.player_a.name }}</a>
-                                <a href="{% url 'player_detail' r.player_b.id %}" class="text-decoration-none text-muted d-block">{{ r.player_b.name }}</a>
+                                <a href="{% url 'player_detail' r.player_a.id %}" class="text-decoration-none fw-bold text-primary d-block">{{ r.player_a.name }}</a>
+                                <a href="{% url 'player_detail' r.player_b.id %}" class="text-decoration-none fw-bold text-primary d-block">{{ r.player_b.name }}</a>
                             </td>
                             <td class="text-center">
                                 <span class="text-success fw-bold">{{ r.a_wins }}</span>
                                 <span class="text-muted">–</span>
                                 <span class="text-danger fw-bold">{{ r.b_wins }}</span>
                             </td>
-                            <td class="text-end pe-3">
+                            <td class="text-center">
                                 <span class="badge bg-secondary">{{ r.meetings }}</span>
+                            </td>
+                            <td class="pe-3 text-end">
+                                <a href="{% url 'analytics' %}?tab=h2h&p1={{ r.player_a.id }}&p2={{ r.player_b.id }}"
+                                   class="btn btn-xs btn-outline-primary" style="font-size:0.7rem; padding:2px 6px;">H2H</a>
                             </td>
                         </tr>
                         {% endfor %}
@@ -115,7 +127,7 @@
         </div>
     </div>
 
-    <!-- Streak Leaderboard -->
+    <!-- Win Streaks -->
     <div class="col-lg-3">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
@@ -145,12 +157,45 @@
         </div>
     </div>
 
-    <!-- Top Events -->
+    <!-- Most Sets Played -->
     <div class="col-lg-4">
         <div class="card shadow-sm h-100">
             <div class="card-header bg-white">
+                <h5 class="mb-0">Most Sets Played</h5>
+                <small class="text-muted">All players by total sets</small>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-hover align-middle mb-0 small">
+                    <thead class="table-light">
+                        <tr>
+                            <th class="ps-3">#</th>
+                            <th>Player</th>
+                            <th class="text-end pe-3">Sets</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in most_sets_table %}
+                        <tr>
+                            <td class="ps-3 text-muted">{{ forloop.counter }}</td>
+                            <td><a href="{% url 'player_detail' row.player.id %}" class="text-decoration-none fw-bold">{{ row.player.name }}</a></td>
+                            <td class="text-end pe-3"><span class="badge bg-success">{{ row.sets }}</span></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Row: Top Events + Tournaments per Year -->
+<div class="row g-4">
+    <!-- Top Events -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
                 <h5 class="mb-0">Biggest Events</h5>
-                <small class="text-muted">By attendance{% if selected_year %}, {{ selected_year }}{% endif %}</small>
+                <small class="text-muted">By attendance{% if selected_season %} — selected season{% elif selected_year %}, {{ selected_year }}{% endif %}</small>
             </div>
             <div class="card-body p-0">
                 <table class="table table-hover align-middle mb-0 small">
@@ -177,4 +222,45 @@
             </div>
         </div>
     </div>
+
+    <!-- Tournaments per Year Chart -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white">
+                <h5 class="mb-0">Tournaments per Year</h5>
+                <small class="text-muted">In-person Michigan tournaments — all time</small>
+            </div>
+            <div class="card-body">
+                <canvas id="tournamentsPerYearChart" height="260"></canvas>
+            </div>
+        </div>
+    </div>
 </div>
+
+<script id="tournaments-per-year-data" type="application/json">{{ tournaments_per_year_data|safe }}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    const perYearData = JSON.parse(document.getElementById('tournaments-per-year-data').textContent);
+    new Chart(document.getElementById('tournamentsPerYearChart'), {
+        type: 'bar',
+        data: {
+            labels: perYearData.map(d => d.year),
+            datasets: [{ label: 'Tournaments', data: perYearData.map(d => d.count), backgroundColor: '#fd7e14' }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } }
+        }
+    });
+})();
+
+// Mutual exclusion: selecting a season resets year and vice versa
+document.getElementById('general-season-filter').addEventListener('change', function() {
+    if (this.value !== 'all') document.getElementById('general-year-filter').value = 'all';
+});
+document.getElementById('general-year-filter').addEventListener('change', function() {
+    if (this.value !== 'all') document.getElementById('general-season-filter').value = 'all';
+});
+</script>
