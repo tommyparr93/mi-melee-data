@@ -1,12 +1,13 @@
 from django.contrib import admin, messages
 
 
-from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult, SyncErrorLog
+from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult, SyncErrorLog, Character
 
 # 1. Register simple models as before
 admin.site.register(Region)
 admin.site.register(PRSeason)
 admin.site.register(Tournament)
+admin.site.register(Character)
 
 @admin.register(SyncErrorLog)
 class SyncErrorLogAdmin(admin.ModelAdmin):
@@ -31,8 +32,8 @@ class PlayerAdmin(admin.ModelAdmin):
     fields = (
         'name',
         'region_code',
-        'character_main',
-        'character_alt',
+        'main_char',
+        'secondary_char',
         'pr_notable',
         'pr_eligible'
     )
