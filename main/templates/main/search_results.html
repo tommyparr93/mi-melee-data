@@ -22,7 +22,13 @@
                                         {% if player.region_code %}
                                             <span class="badge bg-info text-dark">{{ player.region_code.name }}</span>
                                         {% endif %}
-                                        <span class="badge bg-secondary rounded-pill">{{ player.character_main|default:"-" }}</span>
+                                        {% if player.main_char %}
+                                            {% if player.main_char.icon_path %}
+                                                <img src="{{ player.main_char.icon_path }}" alt="{{ player.main_char.name }}" style="width: 24px; height: 24px; object-fit: contain;">
+                                            {% else %}
+                                                <span class="badge bg-secondary rounded-pill">{{ player.main_char.name }}</span>
+                                            {% endif %}
+                                        {% endif %}
                                     </div>
                                 </a>
                             {% endfor %}

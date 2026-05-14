@@ -5,12 +5,16 @@
             {% for player in players %}
                 <a href="{% url 'player_detail' player.pk %}" class="list-group-item list-group-item-action py-2 d-flex justify-content-between align-items-center">
                     <span>{{ player.name }}</span>
-                    <div class="d-flex gap-1">
+                    <div class="d-flex gap-1 align-items-center">
                         {% if player.region_code %}
                             <span class="badge bg-info text-dark border small">{{ player.region_code.name }}</span>
                         {% endif %}
-                        {% if player.character_main %}
-                            <span class="badge bg-light text-dark border small">{{ player.character_main }}</span>
+                        {% if player.main_char %}
+                            {% if player.main_char.icon_path %}
+                                <img src="{{ player.main_char.icon_path }}" alt="{{ player.main_char.name }}" style="width: 24px; height: 24px; object-fit: contain;">
+                            {% else %}
+                                <span class="badge bg-light text-dark border small">{{ player.main_char.name }}</span>
+                            {% endif %}
                         {% endif %}
                     </div>
                 </a>

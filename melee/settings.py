@@ -149,10 +149,9 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 import os
-STATIC_ROOT = os.path.join(BASE_DIR, 'static/')
-SITE_ROOT = os.path.dirname(os.path.realpath(__file__))
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 STATICFILES_DIRS = (
-  os.path.join(SITE_ROOT, 'static/'),
+  os.path.join(BASE_DIR, 'static'),
 )
 
 # Database Backup Settings
