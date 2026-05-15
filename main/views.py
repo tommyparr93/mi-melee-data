@@ -1,5 +1,6 @@
 import json
 import re
+import requests
 from django.db import transaction, models
 from django.http import HttpResponse
 from django.core.paginator import Paginator
@@ -1480,30 +1481,39 @@ class JourneyZipGeocodeView(generic.View):
                 content_type='application/json', status=400)
 
         zip5 = match.group(1)
+
+        # Zippopotam.us — free, no API key, no rate limit, instant for US zips.
         try:
-            from geopy.geocoders import Nominatim
-            from geopy.exc import GeocoderTimedOut, GeocoderServiceError
-            geolocator = Nominatim(user_agent='mi_melee_stats')
-            location = geolocator.geocode(
-                {'postalcode': zip5, 'country': 'United States'}, timeout=10)
-        except ImportError:
+            resp = requests.get(f'https://api.zippopotam.us/us/{zip5}', timeout=8)
+        except requests.RequestException:
             return HttpResponse(
-                json.dumps({'ok': False, 'error': 'Geocoding unavailable on server.'}),
-                content_type='application/json', status=500)
-        except (GeocoderTimedOut, GeocoderServiceError):
-            return HttpResponse(
-                json.dumps({'ok': False, 'error': 'Geocoding service timed out. Try again.'}),
+                json.dumps({'ok': False, 'error': 'Could not reach the geocoding service. Try again.'}),
                 content_type='application/json', status=503)
 
-        if not location:
+        if resp.status_code == 404:
             return HttpResponse(
-                json.dumps({'ok': False, 'error': f'Could not locate zip {zip5}.'}),
+                json.dumps({'ok': False, 'error': f'No US location found for zip {zip5}.'}),
                 content_type='application/json', status=404)
+        if resp.status_code != 200:
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': 'Geocoding service error. Try again.'}),
+                content_type='application/json', status=503)
+
+        try:
+            data = resp.json()
+            place = data['places'][0]
+            lat = float(place['latitude'])
+            lng = float(place['longitude'])
+            label = f"{place['place name']}, {place['state abbreviation']} {zip5}"
+        except (ValueError, KeyError, IndexError, TypeError):
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': f'Unexpected geocoding response for zip {zip5}.'}),
+                content_type='application/json', status=502)
 
         return HttpResponse(json.dumps({
             'ok': True,
             'zip': zip5,
-            'lat': location.latitude,
-            'lng': location.longitude,
-            'label': location.address,
+            'lat': lat,
+            'lng': lng,
+            'label': label,
         }), content_type='application/json')
