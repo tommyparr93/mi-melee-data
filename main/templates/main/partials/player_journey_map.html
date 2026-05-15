@@ -6,18 +6,41 @@
              style="width:48px; height:48px; object-fit:contain;">
         {% endif %}
     </div>
-    <div class="col">
+    <div class="col-12 col-xl">
         <h3 class="mb-0 fw-bold">
             <a href="{% url 'player_detail' player.id %}" class="text-decoration-none text-dark">{{ player.name }}</a>
         </h3>
         <small class="text-muted">{{ journey_count }} tournament{{ journey_count|pluralize }} on the map</small>
     </div>
-    <div class="col-auto">
-        <div class="journey-mileage-card">
-            <div class="mileage-bar"></div>
-            <div>
-                <div class="mileage-label">Total Distance</div>
-                <div class="mileage-value"><span id="info-total-miles">0</span> <small>miles</small></div>
+    <div class="col-12 col-xl-auto">
+        <div class="journey-stat-row">
+            <div class="journey-stat-card">
+                <div class="stat-bar"></div>
+                <div>
+                    <div class="stat-label">Total Distance</div>
+                    <div class="stat-value"><span id="info-total-miles">0</span> <small>miles</small></div>
+                </div>
+            </div>
+            <div class="journey-stat-card">
+                <div class="stat-bar"></div>
+                <div>
+                    <div class="stat-label">Sets Played</div>
+                    <div class="stat-value"><span id="info-total-sets">0</span></div>
+                </div>
+            </div>
+            <div class="journey-stat-card">
+                <div class="stat-bar"></div>
+                <div>
+                    <div class="stat-label">Unique Opponents</div>
+                    <div class="stat-value"><span id="info-total-opponents">0</span></div>
+                </div>
+            </div>
+            <div class="journey-stat-card">
+                <div class="stat-bar"></div>
+                <div>
+                    <div class="stat-label">Unique Venues</div>
+                    <div class="stat-value"><span id="info-total-venues">0</span></div>
+                </div>
             </div>
         </div>
     </div>
@@ -57,7 +80,7 @@
                 </div>
                 <div class="col-6">
                     <div class="stat-block">
-                        <div class="label">Leg Distance</div>
+                        <div class="label" id="info-leg-label">Leg Distance</div>
                         <div class="value"><span id="info-leg-miles">0</span> <small class="text-muted">mi</small></div>
                     </div>
                 </div>
@@ -111,9 +134,9 @@
 
     // Travel speed (ms per leg of journey, includes travel + dwell)
     const SPEED_MS = { 1: 2600, 2: 1400, 3: 700 };
-    const TRAVEL_RATIO = 0.65; // % of cycle spent traveling vs dwelling on the stop
+    const TRAVEL_RATIO = 0.65;       // % of cycle spent traveling vs dwelling on a stop
+    const HOME_DWELL_RATIO = 0.16;   // brief touch when passing through home
     let currentSpeed = 2;
-    let currentIndex = 0;
     let isPlaying = false;
 
     // ─── Haversine distance (miles) ────────────────────────────
@@ -128,18 +151,7 @@
         return 2 * R * Math.asin(Math.sqrt(x));
     }
 
-    // Pre-compute leg distances and cumulative distance
-    const legMiles = [0];
-    const cumulativeMiles = [0];
-    for (let i = 1; i < data.length; i++) {
-        const d = haversineMiles(data[i-1], data[i]);
-        legMiles.push(d);
-        cumulativeMiles.push(cumulativeMiles[i-1] + d);
-    }
-    const totalMiles = cumulativeMiles[cumulativeMiles.length - 1];
-
     // ─── Group tournaments by location for clustered markers ───
-    // Round to ~4 decimals (~11m) to merge same-venue events
     const locKey = (d) => `${d.lat.toFixed(4)},${d.lng.toFixed(4)}`;
     const locationGroups = {};
     data.forEach((d, i) => {
@@ -149,6 +161,22 @@
         }
         locationGroups[key].events.push({ ...d, originalIndex: i });
     });
+
+    // Running cumulative stats by chronological stop index (like total miles)
+    const cumSets = [], cumOpponents = [], cumVenues = [];
+    (function() {
+        let sets = 0;
+        const seenOpps = new Set();
+        const seenVenues = new Set();
+        data.forEach((d, i) => {
+            sets += (d.wins || 0) + (d.losses || 0);
+            (d.opponent_ids || []).forEach(id => seenOpps.add(id));
+            seenVenues.add(locKey(d));
+            cumSets[i] = sets;
+            cumOpponents[i] = seenOpps.size;
+            cumVenues[i] = seenVenues.size;
+        });
+    })();
 
     // ─── Init map ──────────────────────────────────────────────
     const map = L.map('journey-map', {
@@ -163,61 +191,104 @@
         maxZoom: 18,
     }).addTo(map);
 
-    // Fit bounds to all stops
-    const allPts = data.map(d => [d.lat, d.lng]);
-    map.fitBounds(allPts, { padding: [50, 50] });
-
-    // Draw faint polyline for full route
-    L.polyline(allPts, { color: '#94a3b8', weight: 2, opacity: 0.4, dashArray: '6 6' }).addTo(map);
-
+    // Faint full-route line (follows the route — spokes from home when in home mode)
+    const faintLine = L.polyline([], { color: '#94a3b8', weight: 2, opacity: 0.4, dashArray: '6 6' }).addTo(map);
     // Completed polyline: only updated once per leg (cheap)
     const completedLine = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(map);
-    // Active leg polyline: just the 2 points of the current travel — updated every frame (always 2 points, very cheap)
+    // Active leg polyline: just the 2 points of the current travel (constant per-frame cost)
     const activeLeg = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(map);
 
     // Cluster markers (one per unique location, sized by event count)
     Object.entries(locationGroups).forEach(([key, group]) => {
         const count = group.events.length;
         const radius = Math.min(6 + Math.sqrt(count) * 4, 22);
-
-        // Determine win/loss tint at this location
         const totalW = group.events.reduce((s, e) => s + e.wins, 0);
         const totalL = group.events.reduce((s, e) => s + e.losses, 0);
         const wlColor = totalW > totalL ? '#198754' : (totalW < totalL ? '#dc3545' : '#6c757d');
 
         const marker = L.circleMarker([group.lat, group.lng], {
-            radius: radius,
-            color: '#1f2937',
-            weight: 1.5,
-            fillColor: wlColor,
-            fillOpacity: 0.75,
+            radius: radius, color: '#1f2937', weight: 1.5,
+            fillColor: wlColor, fillOpacity: 0.75,
         }).addTo(map);
 
         if (count > 1) {
-            // Count badge as a tooltip permanently shown
             const badge = L.divIcon({
                 className: 'venue-count-badge',
                 html: `<span>${count}</span>`,
-                iconSize: [22, 22],
-                iconAnchor: [11, 11],
+                iconSize: [22, 22], iconAnchor: [11, 11],
             });
             L.marker([group.lat, group.lng], { icon: badge, interactive: false }).addTo(map);
         }
 
-        marker.on('click', () => {
-            // Jump to the first event at this venue, then user can scroll via panel
-            goTo(group.events[0].originalIndex);
-        });
+        marker.on('click', () => jumpToStop(group.events[0].originalIndex));
     });
 
     // Animated player marker (pulsing dot)
     const playerIcon = L.divIcon({
         className: '',
         html: '<div class="player-marker"></div>',
-        iconSize: [20, 20],
-        iconAnchor: [10, 10],
+        iconSize: [20, 20], iconAnchor: [10, 10],
     });
-    const playerMarker = L.marker(allPts[0], { icon: playerIcon, zIndexOffset: 1000 }).addTo(map);
+    const playerMarker = L.marker([data[0].lat, data[0].lng], { icon: playerIcon, zIndexOffset: 1000 }).addTo(map);
+
+    let homeMarker = null;
+
+    // ─── Route model ───────────────────────────────────────────
+    // route[]: ordered nodes the marker walks. Without a home base this is
+    // just the tournaments in order. With a home base it becomes
+    // home → T0 → home → T1 → home → ... so every event is a round trip.
+    let route = [];          // [{lat,lng,kind:'home'|'stop',stopIdx}]
+    let routePts = [];       // [[lat,lng], ...] parallel to route
+    let routeCum = [0];      // cumulative miles at each route node
+    let stopRouteIdx = [];   // stopRouteIdx[stopIdx] -> index into route
+    let stopTripMiles = [];  // round-trip miles for each stop (home mode only)
+    let routePos = 0;
+    let lastStopIdx = 0;
+    let homeMode = false;
+
+    function buildRoute() {
+        const home = window.journeyHome;
+        homeMode = !!(home && typeof home.lat === 'number' && typeof home.lng === 'number');
+        route = [];
+        if (homeMode) {
+            data.forEach((d, i) => {
+                route.push({ lat: home.lat, lng: home.lng, kind: 'home', stopIdx: null });
+                route.push({ lat: d.lat, lng: d.lng, kind: 'stop', stopIdx: i });
+            });
+            route.push({ lat: home.lat, lng: home.lng, kind: 'home', stopIdx: null });
+        } else {
+            data.forEach((d, i) => route.push({ lat: d.lat, lng: d.lng, kind: 'stop', stopIdx: i }));
+        }
+        routePts = route.map(n => [n.lat, n.lng]);
+        routeCum = [0];
+        for (let i = 1; i < route.length; i++) {
+            routeCum.push(routeCum[i-1] + haversineMiles(route[i-1], route[i]));
+        }
+        stopRouteIdx = [];
+        route.forEach((n, ri) => { if (n.kind === 'stop') stopRouteIdx[n.stopIdx] = ri; });
+        stopTripMiles = [];
+        if (homeMode) {
+            data.forEach((d, i) => { stopTripMiles[i] = haversineMiles(home, d) * 2; });
+        }
+    }
+
+    function redrawStatic() {
+        faintLine.setLatLngs(routePts);
+        const pts = data.map(d => [d.lat, d.lng]);
+        if (homeMode) pts.push([window.journeyHome.lat, window.journeyHome.lng]);
+        map.fitBounds(pts, { padding: [50, 50] });
+
+        if (homeMarker) { map.removeLayer(homeMarker); homeMarker = null; }
+        if (homeMode) {
+            const hIcon = L.divIcon({
+                className: '', html: '<div class="home-marker"></div>',
+                iconSize: [26, 30], iconAnchor: [13, 28],
+            });
+            homeMarker = L.marker([window.journeyHome.lat, window.journeyHome.lng],
+                { icon: hIcon, zIndexOffset: 900 }).addTo(map);
+            homeMarker.bindTooltip('Home base', { direction: 'top', offset: [0, -26] });
+        }
+    }
 
     // ─── Helpers ───────────────────────────────────────────────
     function fmtDate(iso) {
@@ -235,12 +306,16 @@
     // Easing: smooth deceleration
     const easeInOutCubic = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
 
-    function updatePanel(idx, opts) {
+    function updatePanel(stopIdx, opts) {
         opts = opts || {};
-        const d = data[idx];
+        const d = data[stopIdx];
         const panel = document.getElementById('info-panel');
         panel.classList.add('updating');
         setTimeout(() => panel.classList.remove('updating'), 320);
+
+        const ri = stopRouteIdx[stopIdx];
+        const legVal = homeMode ? stopTripMiles[stopIdx]
+                                : (stopIdx === 0 ? 0 : haversineMiles(data[stopIdx-1], data[stopIdx]));
 
         // Fast text-only updates first (no layout-thrashing innerHTML)
         document.getElementById('info-name').textContent = d.name;
@@ -250,9 +325,13 @@
         document.getElementById('info-losses').textContent = d.losses;
         document.getElementById('info-placement').textContent = ordinal(d.placement);
         document.getElementById('info-entrants').textContent = d.entrant_count || '—';
-        document.getElementById('info-leg-miles').textContent = fmtMiles(legMiles[idx]);
-        document.getElementById('info-total-miles').textContent = fmtMiles(cumulativeMiles[idx]);
-        document.getElementById('journey-index').textContent = idx + 1;
+        document.getElementById('info-leg-label').textContent = homeMode ? 'Round Trip' : 'Leg Distance';
+        document.getElementById('info-leg-miles').textContent = fmtMiles(legVal);
+        document.getElementById('info-total-miles').textContent = fmtMiles(routeCum[ri]);
+        document.getElementById('info-total-sets').textContent = cumSets[stopIdx].toLocaleString();
+        document.getElementById('info-total-opponents').textContent = cumOpponents[stopIdx].toLocaleString();
+        document.getElementById('info-total-venues').textContent = cumVenues[stopIdx].toLocaleString();
+        document.getElementById('journey-index').textContent = stopIdx + 1;
 
         // Defer the heavy innerHTML rebuilds so they don't block the first animation frame
         const rebuild = () => {
@@ -269,7 +348,7 @@
             if (group && group.events.length > 1) {
                 cluster.style.display = 'block';
                 clusterList.innerHTML = group.events.map(e => {
-                    const active = e.originalIndex === idx ? ' venue-event-active' : '';
+                    const active = e.originalIndex === stopIdx ? ' venue-event-active' : '';
                     return `<button type="button" class="venue-event-pill${active}" onclick="journeyGoTo(${e.originalIndex})">
                         <span class="ve-date">${fmtDate(e.date)}</span>
                         <span class="ve-name">${e.name}</span>
@@ -284,33 +363,24 @@
         if (opts.immediate) {
             rebuild();
         } else {
-            // Wait one frame so the marker animation gets its first paint unblocked
             requestAnimationFrame(rebuild);
         }
     }
 
-    // Pre-compute completed-polyline point lists so we don't rebuild them every frame
-    const completedUpTo = [[data[0].lat, data[0].lng]];
-    for (let i = 1; i < data.length; i++) {
-        completedUpTo.push([data[i].lat, data[i].lng]);
-    }
-    function setCompletedThrough(idx) {
-        // Static line from 0..idx — only called when a leg finishes, not per-frame
-        completedLine.setLatLngs(completedUpTo.slice(0, idx + 1));
+    function setCompletedThrough(routeIdx) {
+        // Static line from route node 0..routeIdx — only on leg boundaries, not per-frame
+        completedLine.setLatLngs(routePts.slice(0, routeIdx + 1));
     }
 
-    // ─── Smooth animated travel between stops ───────────────────
-    function animateTravel(fromIdx, toIdx, durationMs, onDone) {
+    // ─── Smooth animated travel between two route nodes ─────────
+    function animateTravel(fromRi, toRi, durationMs, onDone) {
         if (window.journeyAnim) cancelAnimationFrame(window.journeyAnim);
-        const a = data[fromIdx];
-        const b = data[toIdx];
+        const a = route[fromRi];
+        const b = route[toRi];
 
-        // Anchor the completed line at the start of the leg (cheap, one-time)
-        setCompletedThrough(fromIdx);
-        // Active leg starts as a zero-length segment at point A
+        setCompletedThrough(fromRi);
         activeLeg.setLatLngs([[a.lat, a.lng], [a.lat, a.lng]]);
 
-        // Camera pan — synchronized with marker animation
         const dist = haversineMiles(a, b);
         if (dist > 80) {
             const midLat = (a.lat + b.lat) / 2;
@@ -321,8 +391,8 @@
             map.panTo([b.lat, b.lng], { animate: true, duration: durationMs / 1000 });
         }
 
-        // CRITICAL: lazy-init start timestamp on the FIRST frame, not at scheduling.
-        // Avoids the marker "jumping" forward when first-frame paint is delayed.
+        // Lazy-init start on the FIRST frame, not at scheduling, so the marker
+        // doesn't jump forward when the first paint is delayed.
         let start = null;
 
         function frame(now) {
@@ -333,15 +403,13 @@
             const lng = a.lng + (b.lng - a.lng) * eased;
 
             playerMarker.setLatLng([lat, lng]);
-            // Only 2 points — constant per-frame cost regardless of journey length
             activeLeg.setLatLngs([[a.lat, a.lng], [lat, lng]]);
 
             if (t < 1) {
                 window.journeyAnim = requestAnimationFrame(frame);
             } else {
                 window.journeyAnim = null;
-                // Commit the completed leg, clear the active segment
-                setCompletedThrough(toIdx);
+                setCompletedThrough(toRi);
                 activeLeg.setLatLngs([]);
                 if (onDone) onDone();
             }
@@ -349,54 +417,67 @@
         window.journeyAnim = requestAnimationFrame(frame);
     }
 
-    function goTo(idx, opts) {
-        opts = opts || {};
-        if (idx < 0 || idx >= data.length) return;
-        const animate = opts.animate !== false;
-        const prevIdx = currentIndex;
-        currentIndex = idx;
+    function onArrive(ri, immediate) {
+        const n = route[ri];
+        if (n.kind === 'stop') {
+            lastStopIdx = n.stopIdx;
+            updatePanel(n.stopIdx, { immediate: immediate });
+        }
+        // home nodes: marker visibly returns to the pin; panel keeps last event
+    }
 
-        if (animate && idx - prevIdx === 1) {
-            // Forward step → animate the travel
+    function goToRoute(ri, opts) {
+        opts = opts || {};
+        if (ri < 0 || ri >= route.length) return;
+        const animate = opts.animate !== false;
+        const prev = routePos;
+        routePos = ri;
+
+        if (animate && ri - prev === 1) {
             const cycle = SPEED_MS[currentSpeed];
             const travelMs = cycle * TRAVEL_RATIO;
-            updatePanel(idx);
-            animateTravel(prevIdx, idx, travelMs);
+            onArrive(ri, false);
+            animateTravel(prev, ri, travelMs);
         } else {
-            // Snap (backwards, click, jump) — cancel any in-flight animation
             if (window.journeyAnim) { cancelAnimationFrame(window.journeyAnim); window.journeyAnim = null; }
-            playerMarker.setLatLng([data[idx].lat, data[idx].lng]);
-            setCompletedThrough(idx);
+            const n = route[ri];
+            playerMarker.setLatLng([n.lat, n.lng]);
+            setCompletedThrough(ri);
             activeLeg.setLatLngs([]);
-            map.panTo([data[idx].lat, data[idx].lng], { animate: true, duration: 0.5 });
-            updatePanel(idx, { immediate: true });
+            map.panTo([n.lat, n.lng], { animate: true, duration: 0.5 });
+            onArrive(ri, true);
         }
     }
 
-    function scheduleNext() {
+    // Snap straight to a tournament (cluster click, venue pill, prev/next)
+    function jumpToStop(stopIdx) {
+        pause();
+        if (stopIdx < 0 || stopIdx >= data.length) return;
+        goToRoute(stopRouteIdx[stopIdx], { animate: false });
+    }
+
+    function advance() {
+        if (!isPlaying) return;
+        if (routePos >= route.length - 1) { pause(); return; }
+        goToRoute(routePos + 1);
         const cycle = SPEED_MS[currentSpeed];
-        window.journeyTimer = setTimeout(() => {
-            if (!isPlaying) return;
-            if (currentIndex >= data.length - 1) { pause(); return; }
-            goTo(currentIndex + 1);
-            scheduleNext();
-        }, cycle);
+        const travelMs = cycle * TRAVEL_RATIO;
+        // Dwell depends on what we just arrived at: linger on events, brush past home
+        const arrived = route[routePos].kind;
+        const dwell = arrived === 'home' ? cycle * HOME_DWELL_RATIO
+                                         : cycle * (1 - TRAVEL_RATIO);
+        window.journeyTimer = setTimeout(advance, travelMs + dwell);
     }
 
     function play() {
         if (isPlaying) return;
-        if (currentIndex >= data.length - 1) {
-            // Restart
-            currentIndex = 0;
-            goTo(0, { animate: false });
+        if (routePos >= route.length - 1) {
+            routePos = 0;
+            goToRoute(0, { animate: false });
         }
         isPlaying = true;
         document.getElementById('journey-play-btn').textContent = '⏸';
-        // Trigger immediate first leg
-        if (currentIndex < data.length - 1) {
-            goTo(currentIndex + 1);
-        }
-        scheduleNext();
+        advance();
     }
     function pause() {
         isPlaying = false;
@@ -405,9 +486,9 @@
     }
 
     window.journeyToggle = function() { isPlaying ? pause() : play(); };
-    window.journeyPrev = function() { pause(); goTo(currentIndex - 1, { animate: false }); };
-    window.journeyNext = function() { pause(); goTo(currentIndex + 1, { animate: false }); };
-    window.journeyGoTo = function(i) { pause(); goTo(i, { animate: false }); };
+    window.journeyPrev = function() { jumpToStop(lastStopIdx - 1); };
+    window.journeyNext = function() { jumpToStop(lastStopIdx + 1); };
+    window.journeyGoTo = function(i) { jumpToStop(i); };
     window.journeySetSpeed = function(s, btn) {
         currentSpeed = s;
         document.querySelectorAll('[data-speed]').forEach(b => {
@@ -419,9 +500,29 @@
         if (isPlaying) { pause(); play(); }
     };
 
-    // Initialise — show first stop, show grand total
-    document.getElementById('info-total-miles').textContent = fmtMiles(totalMiles);
-    goTo(0, { animate: false });
+    // Rebuild the whole route when the home base is set/cleared from the shell
+    window.journeyApplyHome = function() {
+        pause();
+        if (window.journeyAnim) { cancelAnimationFrame(window.journeyAnim); window.journeyAnim = null; }
+        buildRoute();
+        redrawStatic();
+        routePos = 0;
+        lastStopIdx = 0;
+        document.getElementById('info-total-miles').textContent = fmtMiles(routeCum[routeCum.length - 1]);
+        const startRi = route[0].kind === 'stop' ? 0 : stopRouteIdx[0];
+        playerMarker.setLatLng([route[0].lat, route[0].lng]);
+        setCompletedThrough(0);
+        goToRoute(startRi, { animate: false });
+    };
+
+    // ─── Initialise ────────────────────────────────────────────
+    buildRoute();
+    redrawStatic();
+    document.getElementById('info-total-miles').textContent = fmtMiles(routeCum[routeCum.length - 1]);
+    playerMarker.setLatLng([route[0].lat, route[0].lng]);
+    setCompletedThrough(0);
+    onArrive(stopRouteIdx[0], true);   // populate the panel with the first event
+    routePos = 0;
 })();
 </script>
 

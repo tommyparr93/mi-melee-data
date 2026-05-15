@@ -5,6 +5,8 @@ import time
 import environ
 import re
 
+import requests
+
 from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
 from django.db import models
 from django.http import HttpResponseRedirect
@@ -12,6 +14,43 @@ from django.core.files.uploadedfile import InMemoryUploadedFile
 from django.shortcuts import reverse, redirect
 import pysmashgg
 from django.db import transaction
+
+STARTGG_ENDPOINT = 'https://api.start.gg/gql/alpha'
+STARTGG_LOCATION_QUERY = """
+query EventLocation($eventId: ID!) {
+  event(id: $eventId) {
+    tournament {
+      lat
+      lng
+      venueName
+      venueAddress
+      postalCode
+    }
+  }
+}
+"""
+
+
+def fetch_startgg_location(token, event_id):
+    """Pull the authoritative venue pin Start.gg stores for an event.
+
+    pysmashgg's tournament_show only returns city/state, so we hit the
+    GraphQL API directly for the organiser-set lat/lng + full address.
+    Returns a dict (possibly with None values) or {} on failure.
+    """
+    try:
+        resp = requests.post(
+            STARTGG_ENDPOINT,
+            json={'query': STARTGG_LOCATION_QUERY, 'variables': {'eventId': event_id}},
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            timeout=20,
+        )
+        if resp.status_code != 200:
+            return {}
+        event = (resp.json().get('data') or {}).get('event')
+        return (event.get('tournament') or {}) if event else {}
+    except (requests.RequestException, ValueError):
+        return {}
 
 
 def extract_url_values(url):
@@ -120,6 +159,14 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
 
     print(f'tournament {tournament_slug} not in DB, fetching API data...')
 
+    # Authoritative venue coordinates from Start.gg (organiser-set pin)
+    loc = fetch_startgg_location(smashggToken, event_id)
+    t_lat = loc.get('lat')
+    t_lng = loc.get('lng')
+    t_venue_name = (loc.get('venueName') or None)
+    t_venue_address = (loc.get('venueAddress') or None)
+    t_postal_code = str(loc['postalCode'])[:20] if loc.get('postalCode') else None
+
     # Fetch All API Data
     i = 1
     get_sets = smash.event_show_sets(event_id, 1)
@@ -215,7 +262,12 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
             pr_season=pr_season,
             slug=tournament_slug,
             region_code_id=region_id,
-            online=t_online
+            online=t_online,
+            lat=t_lat,
+            lng=t_lng,
+            venue_name=t_venue_name,
+            venue_address=t_venue_address,
+            postal_code=t_postal_code,
         )
 
         if players_to_create:

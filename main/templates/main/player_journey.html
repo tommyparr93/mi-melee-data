@@ -123,27 +123,31 @@
     .info-panel.updating .stat-block .value,
     .info-panel.updating .notable-wins-list { opacity: 0.55; }
 
-    /* Total miles card in header */
-    .journey-mileage-card {
-        display: flex; align-items: center; gap: 0.85rem;
-        background: linear-gradient(135deg, #fff 0%, #f1f5ff 100%);
-        color: #0f172a; border-radius: 10px; padding: 0.7rem 1.1rem;
-        border: 1px solid #dbeafe;
-        box-shadow: 0 4px 14px rgba(15,23,42,0.18);
+    /* Header stat cards */
+    .journey-stat-row {
+        display: flex; gap: 0.6rem; flex-wrap: wrap;
     }
-    .journey-mileage-card .mileage-bar {
-        width: 4px; height: 36px; border-radius: 2px;
+    .journey-stat-card {
+        display: flex; align-items: center; gap: 0.7rem;
+        background: linear-gradient(135deg, #fff 0%, #f1f5ff 100%);
+        color: #0f172a; border-radius: 10px; padding: 0.65rem 1rem;
+        border: 1px solid #dbeafe;
+        box-shadow: 0 4px 14px rgba(15,23,42,0.12);
+        flex: 1 1 auto; min-width: 130px;
+    }
+    .journey-stat-card .stat-bar {
+        width: 4px; height: 34px; border-radius: 2px; flex-shrink: 0;
         background: linear-gradient(180deg, #0d6efd 0%, #6366f1 100%);
     }
-    .journey-mileage-card .mileage-label {
-        font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.7px;
-        color: #475569; font-weight: 700;
+    .journey-stat-card .stat-label {
+        font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.7px;
+        color: #475569; font-weight: 700; white-space: nowrap;
     }
-    .journey-mileage-card .mileage-value {
-        font-size: 1.35rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums;
+    .journey-stat-card .stat-value {
+        font-size: 1.3rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums;
         color: #0d6efd;
     }
-    .journey-mileage-card .mileage-value small { font-size: 0.75rem; font-weight: 600; color: #64748b; }
+    .journey-stat-card .stat-value small { font-size: 0.72rem; font-weight: 600; color: #64748b; }
 
     /* Venue cluster (multiple events at one location) */
     .venue-cluster-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
@@ -188,6 +192,52 @@
     .leaflet-pan-anim .leaflet-map-pane {
         transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
     }
+
+    /* Home base control */
+    .home-base-bar {
+        display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
+        margin-top: 1rem; padding-top: 1rem;
+        border-top: 1px solid rgba(255,255,255,0.12);
+    }
+    .home-base-bar .hb-label {
+        font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.8px; color: #93c5fd;
+    }
+    .home-base-bar input {
+        width: 130px; background: rgba(255,255,255,0.08); color: #fff;
+        border: 1px solid rgba(255,255,255,0.18); border-radius: 8px;
+        padding: 0.35rem 0.7rem; font-size: 0.9rem;
+    }
+    .home-base-bar input::placeholder { color: rgba(226,232,240,0.5); }
+    .home-base-bar input:focus {
+        outline: none; background: rgba(255,255,255,0.95); color: #0f172a;
+        border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.3);
+    }
+    .home-base-bar .btn-hb {
+        font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.9rem;
+        border-radius: 8px; border: 1px solid rgba(255,255,255,0.25);
+        background: rgba(255,255,255,0.1); color: #fff; cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .home-base-bar .btn-hb:hover { background: rgba(255,255,255,0.2); }
+    .home-base-bar .btn-hb.solid { background: #2563eb; border-color: #2563eb; }
+    .home-base-bar .btn-hb.solid:hover { background: #1d4ed8; }
+    .home-base-status { font-size: 0.82rem; color: #cbd5e1; }
+    .home-base-status.ok { color: #86efac; }
+    .home-base-status.err { color: #fca5a5; }
+
+    /* Home marker on map */
+    .home-marker {
+        width: 26px; height: 26px; border-radius: 50% 50% 50% 0;
+        background: #f59e0b; border: 2px solid #fff;
+        transform: rotate(-45deg);
+        box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+        display: flex; align-items: center; justify-content: center;
+    }
+    .home-marker::after {
+        content: ''; width: 9px; height: 9px; background: #fff;
+        border-radius: 50%; transform: rotate(45deg);
+    }
 </style>
 
 <!-- Hero / Player picker -->
@@ -212,6 +262,15 @@
             </div>
         </div>
     </div>
+    <div class="home-base-bar">
+        <span class="hb-label">Home Base</span>
+        <input type="text" id="home-zip" inputmode="numeric" maxlength="10"
+               placeholder="Zip code" autocomplete="off"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();applyHomeZip();}">
+        <button type="button" class="btn-hb solid" onclick="applyHomeZip()">Set home</button>
+        <button type="button" class="btn-hb" id="home-clear-btn" onclick="clearHome()" style="display:none;">Clear</button>
+        <span class="home-base-status" id="home-status">Optional — show round trips from a home location to every event.</span>
+    </div>
 </div>
 
 <!-- Loaded via HTMX when a player is selected -->
@@ -227,6 +286,40 @@ function selectPlayer(num, id, name) {
     document.getElementById('journey-search').value = name;
     document.getElementById('journey-search-dropdown').innerHTML = '';
     htmx.ajax('GET', '{% url "journey_data" %}?player=' + id, '#journey-content');
+}
+
+// Session-only home base. Stored on window so the (re-injected) map partial can read it.
+window.journeyHome = null;
+
+function setHomeStatus(msg, kind) {
+    const el = document.getElementById('home-status');
+    el.textContent = msg;
+    el.className = 'home-base-status' + (kind ? ' ' + kind : '');
+}
+
+function applyHomeZip() {
+    const zip = (document.getElementById('home-zip').value || '').trim();
+    if (!zip) { setHomeStatus('Enter a zip code first.', 'err'); return; }
+    setHomeStatus('Locating ' + zip + '…');
+    fetch('{% url "journey_geocode_zip" %}?zip=' + encodeURIComponent(zip))
+        .then(r => r.json())
+        .then(d => {
+            if (!d.ok) { setHomeStatus(d.error || 'Could not find that zip.', 'err'); return; }
+            window.journeyHome = { lat: d.lat, lng: d.lng, label: d.label, zip: d.zip };
+            const short = (d.label || '').split(',').slice(0, 2).join(',').trim() || ('Zip ' + d.zip);
+            setHomeStatus('Home set: ' + short + ' — routes now round-trip from here.', 'ok');
+            document.getElementById('home-clear-btn').style.display = '';
+            if (window.journeyApplyHome) window.journeyApplyHome();
+        })
+        .catch(() => setHomeStatus('Network error while geocoding. Try again.', 'err'));
+}
+
+function clearHome() {
+    window.journeyHome = null;
+    document.getElementById('home-zip').value = '';
+    document.getElementById('home-clear-btn').style.display = 'none';
+    setHomeStatus('Optional — show round trips from a home location to every event.');
+    if (window.journeyApplyHome) window.journeyApplyHome();
 }
 </script>
 {% endblock %}

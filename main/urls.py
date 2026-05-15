@@ -27,5 +27,6 @@ urlpatterns = [
     path('analytics/player-search/', views.AnalyticsPlayerSearchView.as_view(), name='analytics_player_search'),
     path('journey/', views.JourneyView.as_view(), name='journey'),
     path('journey/data/', views.JourneyDataView.as_view(), name='journey_data'),
+    path('journey/geocode-zip/', views.JourneyZipGeocodeView.as_view(), name='journey_geocode_zip'),
 
 ]

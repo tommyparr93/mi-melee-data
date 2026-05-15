@@ -1,4 +1,5 @@
 import json
+import re
 from django.db import transaction, models
 from django.http import HttpResponse
 from django.core.paginator import Paginator
@@ -1431,9 +1432,12 @@ class JourneyDataView(generic.TemplateView):
             losses = len(t_sets) - wins
 
             notable_wins = []
+            t_opponents = set()
             for s in t_sets:
+                opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                if opp_id:
+                    t_opponents.add(opp_id)
                 if s.winner_id == player.id:
-                    opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
                     if opp_id in notable_lookup:
                         notable_wins.append(notable_lookup[opp_id])
 
@@ -1447,6 +1451,7 @@ class JourneyDataView(generic.TemplateView):
                 'wins': wins,
                 'losses': losses,
                 'notable_wins': notable_wins,
+                'opponent_ids': sorted(t_opponents),
                 'entrant_count': t.entrant_count or 0,
                 'placement': placements.get(t.id),
                 'tournament_id': t.id,
@@ -1456,3 +1461,49 @@ class JourneyDataView(generic.TemplateView):
         context['journey_data'] = json.dumps(journey, cls=DjangoJSONEncoder)
         context['journey_count'] = len(journey)
         return context
+
+
+class JourneyZipGeocodeView(generic.View):
+    """Geocode a US zip code to lat/lng for the journey 'home base' feature.
+
+    Session-only: nothing is persisted. Returns JSON so the client can
+    rebuild the route as round-trips from this point.
+    """
+
+    def get(self, request, *args, **kwargs):
+        raw = (request.GET.get('zip') or '').strip()
+        # US 5-digit zip (optionally ZIP+4 — we only use the 5-digit part)
+        match = re.match(r'^(\d{5})(?:-\d{4})?$', raw)
+        if not match:
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': 'Enter a valid 5-digit US zip code.'}),
+                content_type='application/json', status=400)
+
+        zip5 = match.group(1)
+        try:
+            from geopy.geocoders import Nominatim
+            from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+            geolocator = Nominatim(user_agent='mi_melee_stats')
+            location = geolocator.geocode(
+                {'postalcode': zip5, 'country': 'United States'}, timeout=10)
+        except ImportError:
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': 'Geocoding unavailable on server.'}),
+                content_type='application/json', status=500)
+        except (GeocoderTimedOut, GeocoderServiceError):
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': 'Geocoding service timed out. Try again.'}),
+                content_type='application/json', status=503)
+
+        if not location:
+            return HttpResponse(
+                json.dumps({'ok': False, 'error': f'Could not locate zip {zip5}.'}),
+                content_type='application/json', status=404)
+
+        return HttpResponse(json.dumps({
+            'ok': True,
+            'zip': zip5,
+            'lat': location.latitude,
+            'lng': location.longitude,
+            'label': location.address,
+        }), content_type='application/json')
