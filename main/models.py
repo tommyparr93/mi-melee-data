@@ -214,6 +214,9 @@ class Tournament(models.Model):
     type = models.CharField(blank=True, null=True)
     city = models.CharField(blank=True, null=True)
     slug = models.CharField(max_length=255, blank=True, null=True)
+    state = models.CharField(max_length=100, blank=True, null=True)
+    lat = models.FloatField(blank=True, null=True)
+    lng = models.FloatField(blank=True, null=True)
 
     def __str__(self):
         return self.name

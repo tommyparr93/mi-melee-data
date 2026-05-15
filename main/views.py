@@ -1349,3 +1349,110 @@ class AnalyticsPlayerSearchView(generic.TemplateView):
                    if len(q) >= 2 else [])
         context.update({'players': players, 'num': num})
         return context
+
+
+# ---------------------------------------------------------------------------
+# Player Journey Map
+# ---------------------------------------------------------------------------
+
+class JourneyView(generic.TemplateView):
+    """Shell page for the player journey map. No player pre-selected by default."""
+    template_name = 'main/player_journey.html'
+
+
+class JourneyDataView(generic.TemplateView):
+    """HTMX partial — returns the map + animation block for a selected player."""
+    template_name = 'main/partials/player_journey_map.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        player_id = _parse_int_param(self.request, 'player')
+        if not player_id:
+            return context
+
+        try:
+            player = Player.objects.select_related('main_char').get(id=player_id)
+        except Player.DoesNotExist:
+            return context
+
+        context['player'] = player
+
+        # Fetch all sets for the player + tournament data
+        all_sets = list(Set.objects.filter(
+            Q(player1=player) | Q(player2=player)
+        ).select_related('tournament').order_by('tournament__date'))
+
+        # Group sets by tournament
+        tourney_sets = defaultdict(list)
+        for s in all_sets:
+            if s.tournament_id:
+                tourney_sets[s.tournament_id].append(s)
+
+        # Fetch geocoded, non-online tournaments
+        tournaments = list(Tournament.objects.filter(
+            id__in=tourney_sets.keys(),
+            lat__isnull=False,
+            lng__isnull=False,
+        ).exclude(online=True).order_by('date'))
+
+        if not tournaments:
+            context['journey_data'] = json.dumps([])
+            context['journey_count'] = 0
+            return context
+
+        # Placements (one query)
+        placements = {
+            res.tournament_id: res.placement
+            for res in TournamentResults.objects.filter(
+                player_id=player.id, tournament_id__in=[t.id for t in tournaments]
+            )
+        }
+
+        # Collect all opponent IDs they beat, so we can fetch the notable ones in one query
+        beaten_ids = set()
+        for t in tournaments:
+            for s in tourney_sets[t.id]:
+                if s.winner_id == player.id:
+                    opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                    if opp_id:
+                        beaten_ids.add(opp_id)
+
+        notable_lookup = {
+            p.id: p.name
+            for p in Player.objects.filter(
+                id__in=beaten_ids
+            ).filter(Q(pr_notable=True) | Q(pr_eligible=True))
+        }
+
+        journey = []
+        for t in tournaments:
+            t_sets = tourney_sets[t.id]
+            wins = sum(1 for s in t_sets if s.winner_id == player.id)
+            losses = len(t_sets) - wins
+
+            notable_wins = []
+            for s in t_sets:
+                if s.winner_id == player.id:
+                    opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                    if opp_id in notable_lookup:
+                        notable_wins.append(notable_lookup[opp_id])
+
+            journey.append({
+                'name': t.name,
+                'date': t.date.isoformat() if t.date else None,
+                'city': t.city or '',
+                'state': t.state or '',
+                'lat': t.lat,
+                'lng': t.lng,
+                'wins': wins,
+                'losses': losses,
+                'notable_wins': notable_wins,
+                'entrant_count': t.entrant_count or 0,
+                'placement': placements.get(t.id),
+                'tournament_id': t.id,
+                'slug': t.slug or '',
+            })
+
+        context['journey_data'] = json.dumps(journey, cls=DjangoJSONEncoder)
+        context['journey_count'] = len(journey)
+        return context

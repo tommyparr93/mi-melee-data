@@ -210,6 +210,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
             name=t_name,
             date=t_date,
             city=t_city,
+            state=t_state,
             entrant_count=t_entrants,
             pr_season=pr_season,
             slug=tournament_slug,

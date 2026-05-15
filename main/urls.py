@@ -25,5 +25,7 @@ urlpatterns = [
     path('analytics/tab/pr/', views.AnalyticsPRView.as_view(), name='analytics_pr'),
     path('analytics/tab/h2h/', views.AnalyticsH2HView.as_view(), name='analytics_h2h'),
     path('analytics/player-search/', views.AnalyticsPlayerSearchView.as_view(), name='analytics_player_search'),
+    path('journey/', views.JourneyView.as_view(), name='journey'),
+    path('journey/data/', views.JourneyDataView.as_view(), name='journey_data'),
 
 ]

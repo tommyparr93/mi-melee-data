@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+{% block title %}Player Journey - Michigan Melee{% endblock %}
+
+{% block content %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+<style>
+    .journey-hero {
+        position: relative; overflow: hidden;
+        background:
+            radial-gradient(1100px 320px at 90% -10%, rgba(59,130,246,0.35), transparent 60%),
+            radial-gradient(700px 220px at 10% 120%, rgba(99,102,241,0.28), transparent 60%),
+            linear-gradient(135deg, #1e293b 0%, #0f172a 70%);
+        color: #fff;
+        border-radius: 14px;
+        padding: 1.75rem 2rem;
+        margin-bottom: 1.25rem;
+        box-shadow: 0 10px 30px -10px rgba(15,23,42,0.45);
+    }
+    .journey-hero::before {
+        content: ''; position: absolute; inset: 0;
+        background-image:
+            linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
+            linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
+        background-size: 32px 32px;
+        mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 80%);
+        -webkit-mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 80%);
+        pointer-events: none;
+    }
+    .journey-hero > * { position: relative; }
+    .journey-hero .hero-eyebrow {
+        display: inline-block; font-size: 0.7rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 1.2px;
+        color: #93c5fd;
+        background: rgba(59,130,246,0.12);
+        border: 1px solid rgba(147,197,253,0.25);
+        padding: 0.25rem 0.7rem; border-radius: 999px;
+        margin-bottom: 0.55rem;
+    }
+    .journey-hero h1 {
+        font-weight: 800; letter-spacing: -1px; margin: 0;
+        background: linear-gradient(90deg, #fff 0%, #cbd5f5 100%);
+        -webkit-background-clip: text; background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+    .journey-hero .hero-subtitle { color: #cbd5e1; opacity: 0.85; font-size: 0.95rem; margin-top: 0.25rem; }
+
+    .journey-search-wrap { position: relative; }
+    #journey-search {
+        background: rgba(255,255,255,0.08);
+        color: #fff;
+        border: 1px solid rgba(255,255,255,0.18);
+        backdrop-filter: blur(6px);
+        transition: background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    }
+    #journey-search::placeholder { color: rgba(226,232,240,0.6); }
+    #journey-search:focus {
+        background: rgba(255,255,255,0.95);
+        color: #0f172a;
+        border-color: #60a5fa;
+        box-shadow: 0 0 0 3px rgba(96,165,250,0.35);
+    }
+    #journey-search:focus::placeholder { color: #94a3b8; }
+    .journey-search-dropdown {
+        position: absolute; top: 100%; left: 0; right: 0;
+        background: #fff; border: 1px solid #dee2e6; border-top: none;
+        border-radius: 0 0 8px 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.18);
+        z-index: 1050; max-height: 320px; overflow-y: auto;
+        color: #1f2937;
+    }
+
+    #journey-map { height: 60vh; min-height: 480px; border-radius: 12px; overflow: hidden; z-index: 1; }
+
+    .journey-controls {
+        background: #fff; border-radius: 10px; padding: 1rem 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e9ecef;
+    }
+    .journey-btn {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 42px; height: 42px; border-radius: 50%; border: none;
+        background: #f1f3f5; color: #1f2937; font-size: 1rem;
+        transition: all 0.15s ease; cursor: pointer;
+    }
+    .journey-btn:hover { background: #e9ecef; }
+    .journey-btn.primary { background: #0d6efd; color: #fff; }
+    .journey-btn.primary:hover { background: #0b5ed7; }
+
+    .journey-progress {
+        font-variant-numeric: tabular-nums; font-weight: 700; font-size: 1.1rem;
+    }
+
+    .info-panel {
+        background: #fff; border-radius: 10px; padding: 1.25rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06); border: 1px solid #e9ecef;
+        height: 100%;
+    }
+    .info-panel .tourney-name { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.25rem; }
+    .info-panel .tourney-date { font-size: 0.85rem; color: #6c757d; }
+    .info-panel .stat-block {
+        background: #f8f9fa; border-radius: 8px; padding: 0.65rem 0.85rem;
+        font-size: 0.85rem;
+    }
+    .info-panel .stat-block .label { font-size: 0.7rem; text-transform: uppercase; color: #6c757d; letter-spacing: 0.5px; font-weight: 700; }
+    .info-panel .stat-block .value { font-size: 1.1rem; font-weight: 700; }
+
+    .notable-wins-list { font-size: 0.85rem; line-height: 1.6; }
+    .notable-wins-list .badge { font-size: 0.7rem; font-weight: 600; }
+
+    /* Smooth panel transitions when stop changes */
+    .info-panel { transition: box-shadow 0.3s ease; }
+    .info-panel.updating { box-shadow: 0 4px 18px rgba(13,110,253,0.18); }
+    .info-panel .tourney-name,
+    .info-panel #info-location,
+    .info-panel .stat-block .value,
+    .notable-wins-list {
+        transition: opacity 0.25s ease;
+    }
+    .info-panel.updating .tourney-name,
+    .info-panel.updating #info-location,
+    .info-panel.updating .stat-block .value,
+    .info-panel.updating .notable-wins-list { opacity: 0.55; }
+
+    /* Total miles card in header */
+    .journey-mileage-card {
+        display: flex; align-items: center; gap: 0.85rem;
+        background: linear-gradient(135deg, #fff 0%, #f1f5ff 100%);
+        color: #0f172a; border-radius: 10px; padding: 0.7rem 1.1rem;
+        border: 1px solid #dbeafe;
+        box-shadow: 0 4px 14px rgba(15,23,42,0.18);
+    }
+    .journey-mileage-card .mileage-bar {
+        width: 4px; height: 36px; border-radius: 2px;
+        background: linear-gradient(180deg, #0d6efd 0%, #6366f1 100%);
+    }
+    .journey-mileage-card .mileage-label {
+        font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.7px;
+        color: #475569; font-weight: 700;
+    }
+    .journey-mileage-card .mileage-value {
+        font-size: 1.35rem; font-weight: 800; line-height: 1.05; font-variant-numeric: tabular-nums;
+        color: #0d6efd;
+    }
+    .journey-mileage-card .mileage-value small { font-size: 0.75rem; font-weight: 600; color: #64748b; }
+
+    /* Venue cluster (multiple events at one location) */
+    .venue-cluster-list { display: flex; flex-direction: column; gap: 4px; max-height: 180px; overflow-y: auto; }
+    .venue-event-pill {
+        display: grid; grid-template-columns: 70px 1fr auto; gap: 0.5rem; align-items: center;
+        text-align: left; background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px;
+        padding: 0.35rem 0.6rem; font-size: 0.8rem; cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .venue-event-pill:hover { background: #e9ecef; border-color: #0d6efd; }
+    .venue-event-pill .ve-date { font-size: 0.7rem; color: #6c757d; font-weight: 600; }
+    .venue-event-pill .ve-name { font-weight: 600; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .venue-event-pill .ve-record { font-size: 0.75rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .venue-event-pill.venue-event-active {
+        background: #e7f1ff; border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd inset;
+    }
+
+    /* Cluster count badge on map */
+    .venue-count-badge {
+        background: #fff; border: 2px solid #0d6efd; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 0.7rem; font-weight: 800; color: #0d6efd;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.25); pointer-events: none;
+    }
+    .venue-count-badge span { line-height: 1; }
+
+    /* Animated marker pulse */
+    .player-marker {
+        background: radial-gradient(circle, #0d6efd 30%, rgba(13,110,253,0.3) 70%);
+        border-radius: 50%; width: 20px; height: 20px;
+        box-shadow: 0 0 0 0 rgba(13,110,253, 0.6);
+        animation: pulse 1.5s infinite;
+        will-change: transform;
+    }
+    @keyframes pulse {
+        0%   { box-shadow: 0 0 0 0 rgba(13,110,253, 0.6); }
+        70%  { box-shadow: 0 0 0 18px rgba(13,110,253, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(13,110,253, 0); }
+    }
+
+    /* Smoother Leaflet pan transitions */
+    .leaflet-pan-anim .leaflet-map-pane {
+        transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+</style>
+
+<!-- Hero / Player picker -->
+<div class="journey-hero">
+    <div class="row align-items-center g-3">
+        <div class="col-md-6">
+            <span class="hero-eyebrow">Michigan Melee · On The Road</span>
+            <h1>Player Journey</h1>
+            <div class="hero-subtitle">An animated trip through a player's tournament history</div>
+        </div>
+        <div class="col-md-6">
+            <div class="journey-search-wrap">
+                <input type="text" id="journey-search" class="form-control form-control-lg"
+                       placeholder="Search a player to begin..."
+                       autocomplete="off"
+                       hx-get="{% url 'analytics_player_search' %}?num=journey"
+                       hx-trigger="keyup changed delay:250ms"
+                       hx-target="#journey-search-dropdown"
+                       hx-include="#journey-search"
+                       name="q">
+                <div id="journey-search-dropdown" class="journey-search-dropdown"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Loaded via HTMX when a player is selected -->
+<div id="journey-content">
+    <div class="text-center text-muted py-5">
+        <p class="fs-5 mb-1">Search for a player above to start their journey.</p>
+        <small>The map will plot every in-person tournament they've attended in chronological order.</small>
+    </div>
+</div>
+
+<script>
+function selectPlayer(num, id, name) {
+    document.getElementById('journey-search').value = name;
+    document.getElementById('journey-search-dropdown').innerHTML = '';
+    htmx.ajax('GET', '{% url "journey_data" %}?player=' + id, '#journey-content');
+}
+</script>
+{% endblock %}
