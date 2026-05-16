@@ -95,6 +95,14 @@
                 <div class="label small text-muted text-uppercase fw-bold mb-1" style="letter-spacing:0.5px; font-size:0.7rem;">Other Events at This Venue</div>
                 <div class="venue-cluster-list" id="venue-cluster-list"></div>
             </div>
+
+            <div class="sets-played mt-3">
+                <button type="button" class="sets-toggle" id="sets-toggle" onclick="journeyToggleSets()" aria-expanded="false">
+                    <span class="sets-toggle-label">Sets Played <span class="sets-count" id="sets-count">0</span></span>
+                    <span class="sets-chevron" id="sets-chevron">▾</span>
+                </button>
+                <div class="sets-list" id="sets-list" style="display:none;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -245,6 +253,7 @@
     let routePos = 0;
     let lastStopIdx = 0;
     let homeMode = false;
+    let zoomedOutForHop = false;  // true while camera is pulled back for a long trip
 
     function buildRoute() {
         const home = window.journeyHome;
@@ -291,6 +300,11 @@
     }
 
     // ─── Helpers ───────────────────────────────────────────────
+    function escapeHtml(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+        }[c]));
+    }
     function fmtDate(iso) {
         if (!iso) return '—';
         const d = new Date(iso);
@@ -358,6 +372,8 @@
             } else {
                 cluster.style.display = 'none';
             }
+
+            renderSets(d);
         };
 
         if (opts.immediate) {
@@ -366,6 +382,45 @@
             requestAnimationFrame(rebuild);
         }
     }
+
+    function renderSets(d) {
+        const sets = d.sets || [];
+        document.getElementById('sets-count').textContent = sets.length;
+        const list = document.getElementById('sets-list');
+        const toggle = document.getElementById('sets-toggle');
+        const open = !!window.journeySetsOpen;
+        toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+        list.style.display = open ? 'flex' : 'none';
+        if (!open) return;  // don't build hidden DOM until expanded
+
+        if (!sets.length) {
+            list.innerHTML = '<div class="text-muted small px-1 py-2">No set data recorded for this event.</div>';
+            return;
+        }
+        list.innerHTML = sets.map(s => {
+            const cls = s.won ? 'win' : 'loss';
+            const res = s.won ? 'W' : 'L';
+            const score = (s.ms == null || s.os == null) ? '—' : `${s.ms}–${s.os}`;
+            const round = s.round ? `<span class="sr-round">${escapeHtml(s.round)}</span>` : '';
+            return `<div class="set-row ${cls}">
+                <span class="sr-res">${res}</span>
+                <span class="sr-mid">
+                    <div class="sr-opp">${escapeHtml(s.opp)}</div>
+                    ${round}
+                </span>
+                <span class="sr-score">${score}</span>
+            </div>`;
+        }).join('');
+    }
+
+    window.journeyToggleSets = function() {
+        window.journeySetsOpen = !window.journeySetsOpen;
+        if (route[routePos]) {
+            const n = route[routePos];
+            const si = n.kind === 'stop' ? n.stopIdx : lastStopIdx;
+            renderSets(data[si]);
+        }
+    };
 
     function setCompletedThrough(routeIdx) {
         // Static line from route node 0..routeIdx — only on leg boundaries, not per-frame
@@ -382,13 +437,26 @@
         activeLeg.setLatLngs([[a.lat, a.lng], [a.lat, a.lng]]);
 
         const dist = haversineMiles(a, b);
+        const flyDur = durationMs / 1000;
         if (dist > 80) {
-            const midLat = (a.lat + b.lat) / 2;
-            const midLng = (a.lng + b.lng) / 2;
-            map.flyTo([midLat, midLng], Math.max(map.getZoom() - 0.5, 4),
-                { duration: durationMs / 1000, easeLinearity: 0.4 });
+            // Long hop (typically out of state): pull the camera back to frame
+            // BOTH endpoints so you actually watch the marker travel across
+            // instead of it flying off a zoomed-in view.
+            map.flyToBounds([[a.lat, a.lng], [b.lat, b.lng]], {
+                paddingTopLeft: [60, 80],
+                paddingBottomRight: [60, 60],
+                duration: flyDur,
+                easeLinearity: 0.2,
+                maxZoom: 9,
+            });
+            zoomedOutForHop = true;
+        } else if (zoomedOutForHop && map.getZoom() < 9) {
+            // Coming back to local events after a long trip — ease back in
+            // smoothly rather than panning at a far-out zoom.
+            map.flyTo([b.lat, b.lng], 10, { duration: flyDur, easeLinearity: 0.3 });
+            zoomedOutForHop = false;
         } else {
-            map.panTo([b.lat, b.lng], { animate: true, duration: durationMs / 1000 });
+            map.panTo([b.lat, b.lng], { animate: true, duration: flyDur });
         }
 
         // Lazy-init start on the FIRST frame, not at scheduling, so the marker

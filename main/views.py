@@ -1410,21 +1410,22 @@ class JourneyDataView(generic.TemplateView):
             )
         }
 
-        # Collect all opponent IDs they beat, so we can fetch the notable ones in one query
-        beaten_ids = set()
+        # Collect every opponent ID across mapped tournaments, then resolve all
+        # names + notable flags in one query (used for both notable wins and
+        # the expandable per-tournament set list).
+        all_opp_ids = set()
         for t in tournaments:
             for s in tourney_sets[t.id]:
-                if s.winner_id == player.id:
-                    opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
-                    if opp_id:
-                        beaten_ids.add(opp_id)
+                opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                if opp_id:
+                    all_opp_ids.add(opp_id)
 
-        notable_lookup = {
-            p.id: p.name
-            for p in Player.objects.filter(
-                id__in=beaten_ids
-            ).filter(Q(pr_notable=True) | Q(pr_eligible=True))
-        }
+        opp_lookup = {}      # id -> name
+        notable_ids = set()  # ids that are pr_notable or pr_eligible
+        for p in Player.objects.filter(id__in=all_opp_ids).only('id', 'name', 'pr_notable', 'pr_eligible'):
+            opp_lookup[p.id] = p.name
+            if p.pr_notable or p.pr_eligible:
+                notable_ids.add(p.id)
 
         journey = []
         for t in tournaments:
@@ -1434,13 +1435,29 @@ class JourneyDataView(generic.TemplateView):
 
             notable_wins = []
             t_opponents = set()
+            set_list = []
             for s in t_sets:
-                opp_id = s.player2_id if s.player1_id == player.id else s.player1_id
+                if s.player1_id == player.id:
+                    opp_id = s.player2_id
+                    my_score, opp_score = s.player1_score, s.player2_score
+                else:
+                    opp_id = s.player1_id
+                    my_score, opp_score = s.player2_score, s.player1_score
+
                 if opp_id:
                     t_opponents.add(opp_id)
-                if s.winner_id == player.id:
-                    if opp_id in notable_lookup:
-                        notable_wins.append(notable_lookup[opp_id])
+                won = s.winner_id == player.id
+                if won and opp_id in notable_ids:
+                    notable_wins.append(opp_lookup.get(opp_id, 'Unknown'))
+
+                set_list.append({
+                    'opp': opp_lookup.get(opp_id, 'Unknown'),
+                    'opp_id': opp_id,
+                    'ms': my_score if my_score is not None and my_score >= 0 else None,
+                    'os': opp_score if opp_score is not None and opp_score >= 0 else None,
+                    'won': won,
+                    'round': s.location or '',
+                })
 
             journey.append({
                 'name': t.name,
@@ -1453,6 +1470,7 @@ class JourneyDataView(generic.TemplateView):
                 'losses': losses,
                 'notable_wins': notable_wins,
                 'opponent_ids': sorted(t_opponents),
+                'sets': set_list,
                 'entrant_count': t.entrant_count or 0,
                 'placement': placements.get(t.id),
                 'tournament_id': t.id,

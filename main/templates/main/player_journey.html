@@ -165,6 +165,45 @@
         background: #e7f1ff; border-color: #0d6efd; box-shadow: 0 0 0 1px #0d6efd inset;
     }
 
+    /* Expandable per-tournament set list */
+    .sets-toggle {
+        width: 100%; display: flex; align-items: center; justify-content: space-between;
+        background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px;
+        padding: 0.5rem 0.75rem; cursor: pointer; transition: all 0.15s ease;
+    }
+    .sets-toggle:hover { background: #eef1f4; border-color: #cdd5df; }
+    .sets-toggle .sets-toggle-label {
+        font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.5px;
+        font-weight: 700; color: #475569;
+    }
+    .sets-toggle .sets-count {
+        display: inline-block; background: #0d6efd; color: #fff;
+        font-size: 0.65rem; font-weight: 700; border-radius: 999px;
+        padding: 0.05rem 0.45rem; margin-left: 0.25rem;
+    }
+    .sets-chevron { color: #64748b; font-size: 0.8rem; transition: transform 0.2s ease; }
+    .sets-toggle[aria-expanded="true"] .sets-chevron { transform: rotate(180deg); }
+    .sets-list {
+        margin-top: 6px; display: flex; flex-direction: column; gap: 4px;
+        max-height: 230px; overflow-y: auto;
+    }
+    .set-row {
+        display: grid; grid-template-columns: 22px 1fr auto; gap: 0.55rem; align-items: center;
+        background: #fff; border: 1px solid #e9ecef; border-left-width: 3px;
+        border-radius: 6px; padding: 0.35rem 0.55rem; font-size: 0.8rem;
+    }
+    .set-row.win  { border-left-color: #198754; }
+    .set-row.loss { border-left-color: #dc3545; }
+    .set-row .sr-res {
+        font-weight: 800; font-size: 0.72rem; text-align: center;
+    }
+    .set-row.win  .sr-res { color: #198754; }
+    .set-row.loss .sr-res { color: #dc3545; }
+    .set-row .sr-mid { min-width: 0; }
+    .set-row .sr-opp { font-weight: 600; color: #1f2937; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .set-row .sr-round { font-size: 0.68rem; color: #94a3b8; }
+    .set-row .sr-score { font-weight: 700; font-variant-numeric: tabular-nums; color: #334155; }
+
     /* Cluster count badge on map */
     .venue-count-badge {
         background: #fff; border: 2px solid #0d6efd; border-radius: 50%;
