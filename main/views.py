@@ -16,8 +16,11 @@ from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple, defaultdict
 from django.urls import reverse_lazy
-from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch
+from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch, Max
 from django.db.models.functions import Cast, Lower
+from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from functools import wraps
 
 class HomeView(generic.TemplateView):
     template_name = 'main/home.html'
@@ -676,6 +679,50 @@ class PrEligiblePlayerListView(PlayerListView):
         return context
 
 
+def _data_version():
+    """Cheap token that changes whenever the data backing the heavy aggregate
+    pages changes. All three lookups are sub-millisecond (PK MAX uses the
+    primary-key index; the eligible count uses idx_player_pr_eligible).
+
+    Including this in the cache key means a fresh tournament import or an
+    eligibility change instantly invalidates cached pages — so caching stays
+    a strict win with no perceivable staleness. The cache TIMEOUT is only a
+    backstop for rare edits that don't move any of these (e.g. renaming a
+    tournament without adding sets).
+    """
+    max_set = Set.objects.aggregate(m=Max('id'))['m'] or 0
+    max_tourn = Tournament.objects.aggregate(m=Max('id'))['m'] or 0
+    elig = Player.objects.filter(pr_eligible=True).count()
+    return f"{max_set}-{max_tourn}-{elig}"
+
+
+def cached_partial(timeout=900):
+    """Cache the rendered HTML of a heavy, read-only, no-auth GET view.
+
+    Caches response *bytes* (no Django-model pickling), keyed by full path +
+    query string + data version. Only caches 200 responses to GET requests;
+    anything else passes straight through untouched.
+    """
+    def decorator(view_func):
+        @wraps(view_func)
+        def wrapper(request, *args, **kwargs):
+            if request.method != 'GET':
+                return view_func(request, *args, **kwargs)
+            key = f"cv:{request.get_full_path()}:{_data_version()}"
+            cached = cache.get(key)
+            if cached is not None:
+                return HttpResponse(cached)
+            response = view_func(request, *args, **kwargs)
+            if hasattr(response, 'render') and callable(response.render):
+                response.render()
+            if getattr(response, 'status_code', None) == 200:
+                cache.set(key, response.content, timeout)
+            return response
+        return wrapper
+    return decorator
+
+
+@cached_partial(timeout=900)
 def pr_table(request):
     # 1. Get eligible players and the active season
     players = list(Player.objects.filter(pr_eligible=True).order_by(Lower('name')))
@@ -835,6 +882,7 @@ class AnalyticsView(generic.TemplateView):
 # Tab 1: General (Fun Stats)
 # ---------------------------------------------------------------------------
 
+@method_decorator(cached_partial(timeout=900), name='dispatch')
 class AnalyticsRecordsView(generic.TemplateView):
     template_name = 'main/partials/analytics_records.html'
 

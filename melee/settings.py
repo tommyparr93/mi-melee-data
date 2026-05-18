@@ -93,6 +93,21 @@ TEMPLATES = [
 WSGI_APPLICATION = 'melee.wsgi.application'
 
 
+# Cache
+# Local-memory cache: no extra infrastructure, evicts under memory pressure.
+# Used by the cached_partial decorator on heavy read-only aggregate views.
+# Freshness is handled by a data-version token in the cache key (see views),
+# so TIMEOUT is only a backstop, not the primary invalidation mechanism.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'melee-default',
+        'TIMEOUT': 900,
+        'OPTIONS': {'MAX_ENTRIES': 500},
+    }
+}
+
+
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 

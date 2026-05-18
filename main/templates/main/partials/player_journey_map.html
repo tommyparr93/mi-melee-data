@@ -351,7 +351,7 @@
         const rebuild = () => {
             const notable = document.getElementById('info-notable');
             if (d.notable_wins && d.notable_wins.length) {
-                notable.innerHTML = d.notable_wins.map(n => `<span class="badge bg-success me-1 mb-1">${n}</span>`).join('');
+                notable.innerHTML = d.notable_wins.map(n => `<span class="badge bg-success me-1 mb-1">${escapeHtml(n)}</span>`).join('');
             } else {
                 notable.innerHTML = '<span class="text-muted small">None</span>';
             }
@@ -365,7 +365,7 @@
                     const active = e.originalIndex === stopIdx ? ' venue-event-active' : '';
                     return `<button type="button" class="venue-event-pill${active}" onclick="journeyGoTo(${e.originalIndex})">
                         <span class="ve-date">${fmtDate(e.date)}</span>
-                        <span class="ve-name">${e.name}</span>
+                        <span class="ve-name">${escapeHtml(e.name)}</span>
                         <span class="ve-record"><span class="text-success">${e.wins}</span>-<span class="text-danger">${e.losses}</span></span>
                     </button>`;
                 }).join('');
