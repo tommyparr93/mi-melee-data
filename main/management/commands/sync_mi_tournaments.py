@@ -44,10 +44,12 @@ class Command(BaseCommand):
         else:
             # Get the most recent tournament date from our DB
             latest_tournament = Tournament.objects.order_by('-date').first()
-            if latest_tournament:
+            if latest_tournament and latest_tournament.date:
                 # Go back a couple of days from the latest to catch overlaps
                 after_date = latest_tournament.date - datetime.timedelta(days=1)
-                after_timestamp = int(after_date.timestamp())
+                # Convert the date object to a datetime object so we can get the timestamp
+                after_datetime = datetime.datetime.combine(after_date, datetime.datetime.min.time())
+                after_timestamp = int(after_datetime.timestamp())
                 self.stdout.write(f"Using date from latest DB tournament: {after_date.strftime('%Y-%m-%d')} ({after_timestamp})")
             else:
                 # Default to a safe recent date if DB is empty (e.g. start of 2025)
