@@ -1,10 +1,10 @@
 {% extends 'base.html' %}
-{% block title %}Melee PR Tracker - Home{% endblock %}
+{% block title %}MI Melee Stats{% endblock %}
 
 {% block content %}
 <div class="p-5 mb-4 bg-light rounded-3 border">
     <div class="container-fluid py-5 text-center">
-        <h1 class="display-5 fw-bold">MiMelee</h1>
+        <h1 class="display-5 fw-bold">MIMeleeStats</h1>
         <p class="col-md-12 fs-4">The Home of Michigan Melee Stats Tracking</p>
         <div class="d-grid gap-2 d-sm-flex justify-content-sm-center mt-4">
             <a href="{% url 'players' %}" class="btn btn-primary btn-lg px-4 gap-3">View Players</a>
@@ -32,23 +32,47 @@
     </div>
 </div>
 
-<div class="row g-4 py-5 justify-content-center">
-    <div class="col-md-6">
+<div class="row g-4 py-4">
+    <div class="col-lg-4">
         <div class="card h-100 shadow-sm border-info">
-            <div class="card-body text-center">
-                <h2 class="h4">Power Rankings & Data</h2>
-                <p>Check the latest Michigan Power Rankings, eligibility status, and head-to-head records.</p>
-                <div class="d-grid gap-2 d-md-flex justify-content-center">
-                    <a href="{% url 'pr_season_details' 2 %}" class="btn btn-info text-white px-4">Current MI PR</a>
-                    <a href="{% url 'pr_eligible_players' %}" class="btn btn-outline-info px-4">PR Eligibility</a>
-                    <a href="{% url 'pr_table' %}" class="btn btn-outline-dark px-4">H2H Matrix</a>
+            <div class="card-body d-flex flex-column text-center">
+                <h2 class="h4">Power Rankings &amp; Data</h2>
+                <p class="text-muted flex-grow-1">The latest Michigan Power Rankings, eligibility status, and head-to-head records.</p>
+                <div class="d-grid gap-2">
+                    <a href="{% if current_mi_pr_season %}{% url 'pr_season_details' current_mi_pr_season.id %}{% else %}{% url 'pr_season_details' 2 %}{% endif %}" class="btn btn-info text-white">Current MI PR</a>
+                    <div class="d-flex gap-2">
+                        <a href="{% url 'pr_eligible_players' %}" class="btn btn-outline-info flex-fill">PR Eligibility</a>
+                        <a href="{% url 'pr_table' %}" class="btn btn-outline-dark flex-fill">H2H Matrix</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm border-primary">
+            <div class="card-body d-flex flex-column text-center">
+                <h2 class="h4">Analytics</h2>
+                <p class="text-muted flex-grow-1">Win-rate leaders, most-active players, PR rank movement across seasons, and the head-to-head matrix.</p>
+                <div class="d-grid mt-auto">
+                    <a href="{% url 'analytics' %}" class="btn btn-primary">Explore Analytics</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card h-100 shadow-sm border-success">
+            <div class="card-body d-flex flex-column text-center">
+                <h2 class="h4">Player Journey</h2>
+                <p class="text-muted flex-grow-1">An animated map of a player's tournament travels — distance covered, record, and notable wins.</p>
+                <div class="d-grid mt-auto">
+                    <a href="{% url 'journey' %}" class="btn btn-success">Open Journey Map</a>
                 </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row mt-5">
+<div class="row mt-4">
     <div class="col-md-12">
         <h3 class="mb-4">Recent Tournaments</h3>
         <div class="table-responsive shadow-sm rounded">
