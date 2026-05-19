@@ -24,6 +24,15 @@
             <div class="journey-stat-card">
                 <div class="stat-bar"></div>
                 <div>
+                    <div class="stat-label">Record</div>
+                    <div class="stat-value">
+                        <span style="color:#198754" id="info-total-wins">0</span><span style="color:#94a3b8">–</span><span style="color:#dc3545" id="info-total-losses">0</span>
+                    </div>
+                </div>
+            </div>
+            <div class="journey-stat-card">
+                <div class="stat-bar"></div>
+                <div>
                     <div class="stat-label">Sets Played</div>
                     <div class="stat-value"><span id="info-total-sets">0</span></div>
                 </div>
@@ -171,16 +180,20 @@
     });
 
     // Running cumulative stats by chronological stop index (like total miles)
-    const cumSets = [], cumOpponents = [], cumVenues = [];
+    const cumSets = [], cumOpponents = [], cumVenues = [], cumWins = [], cumLosses = [];
     (function() {
-        let sets = 0;
+        let sets = 0, wins = 0, losses = 0;
         const seenOpps = new Set();
         const seenVenues = new Set();
         data.forEach((d, i) => {
             sets += (d.wins || 0) + (d.losses || 0);
+            wins += (d.wins || 0);
+            losses += (d.losses || 0);
             (d.opponent_ids || []).forEach(id => seenOpps.add(id));
             seenVenues.add(locKey(d));
             cumSets[i] = sets;
+            cumWins[i] = wins;
+            cumLosses[i] = losses;
             cumOpponents[i] = seenOpps.size;
             cumVenues[i] = seenVenues.size;
         });
@@ -342,6 +355,8 @@
         document.getElementById('info-leg-label').textContent = homeMode ? 'Round Trip' : 'Leg Distance';
         document.getElementById('info-leg-miles').textContent = fmtMiles(legVal);
         document.getElementById('info-total-miles').textContent = fmtMiles(routeCum[ri]);
+        document.getElementById('info-total-wins').textContent = cumWins[stopIdx];
+        document.getElementById('info-total-losses').textContent = cumLosses[stopIdx];
         document.getElementById('info-total-sets').textContent = cumSets[stopIdx].toLocaleString();
         document.getElementById('info-total-opponents').textContent = cumOpponents[stopIdx].toLocaleString();
         document.getElementById('info-total-venues').textContent = cumVenues[stopIdx].toLocaleString();

@@ -2,11 +2,11 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Add Season</h5>
+        <h5 class="modal-title">{{ form_title|default:"Add Season" }}</h5>
         <button type="button" class="btn-close" onclick="document.getElementById('modal-container').innerHTML=''"></button>
       </div>
       <div class="modal-body">
-        <form hx-post="{% url 'pr_season_create' %}" hx-target="#modal-container">
+        <form hx-post="{% if form_action %}{{ form_action }}{% else %}{% url 'pr_season_create' %}{% endif %}" hx-target="#modal-container">
           {% csrf_token %}
           {{ form.as_p }}
           <button type="submit" class="btn btn-primary">Save</button>

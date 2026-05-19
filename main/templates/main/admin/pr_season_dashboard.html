@@ -1,5 +1,12 @@
 {% extends 'base.html' %}
 {% block content %}
+<style>
+    @keyframes prRowSaved {
+        0%   { background-color: #d1e7dd; }
+        100% { background-color: transparent; }
+    }
+    .pr-row-saved td { animation: prRowSaved 1.4s ease-out; }
+</style>
 <div class="container-fluid mt-4">
     <div class="row">
         <div class="col-md-3">
@@ -8,9 +15,10 @@
                 <a href="{% url 'pr_season_list' %}" class="list-group-item list-group-item-action">
                     <i class="fas fa-chevron-left"></i> Back to All Seasons
                 </a>
-                <a href="{% url 'admin:main_prseason_change' season.pk %}" class="list-group-item list-group-item-action">
-                    <i class="fas fa-cog"></i> Open in Django Admin
-                </a>
+                <button class="list-group-item list-group-item-action"
+                        hx-get="{% url 'pr_season_edit' season.pk %}" hx-target="#modal-container">
+                    <i class="fas fa-cog"></i> Edit Season Details
+                </button>
                 <button class="list-group-item list-group-item-action text-success" 
                         hx-get="{% url 'add_player_to_season' season.id %}" hx-target="#modal-container">
                     <i class="fas fa-plus-circle"></i> Add Player to PR
@@ -33,18 +41,7 @@
                                 <th class="text-end pe-4">Actions</th>
                             </tr>
                         </thead>
-                        <tbody id="pr-list-body">
-                            {% for result in ranked_players %}
-                            <tr>
-                                <td class="ps-4"><input type="number" class="form-control form-control-sm" value="{{ result.rank }}" style="width: 60px;"></td>
-                                <td><strong>{{ result.player.name }}</strong></td>
-                            </tr>
-                            {% empty %}
-                            <tr>
-                                <td colspan="3" class="text-center py-4 text-muted">No players added to this season yet.</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
+                        {% include 'main/admin/partials/pr_ranked_tbody.html' %}
                     </table>
                 </div>
             </div>

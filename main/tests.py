@@ -8,15 +8,48 @@ its data-version invalidation is locked down here).
 from django.test import TestCase, SimpleTestCase, RequestFactory
 from django.core.cache import cache
 from django.http import HttpResponse
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 
-from main.models import Player, Tournament, Set, PRSeason
+from main.models import Player, Tournament, Set, PRSeason, PRSeasonResult
 from main.views import (
     player_detail_calculations,
     get_head_to_head_results,
     _parse_int_param,
     _data_version,
     cached_partial,
+    _rank_sort_key,
 )
+
+
+class _RankStub:
+    def __init__(self, rank):
+        self.rank = rank
+
+
+class RankSortKeyTests(SimpleTestCase):
+    """Locks the PR rank order: numbers ascending by value (not string),
+    then text ranks (IM before HM), then any other text alphabetically."""
+
+    def _sorted(self, ranks):
+        return [r.rank for r in sorted((_RankStub(x) for x in ranks),
+                                       key=_rank_sort_key)]
+
+    def test_numeric_orders_by_value_not_string(self):
+        self.assertEqual(self._sorted(['10', '2', '1', '3']),
+                         ['1', '2', '3', '10'])
+
+    def test_text_ranks_come_after_numbers(self):
+        self.assertEqual(self._sorted(['IM', '2', 'HM', '1', '10']),
+                         ['1', '2', '10', 'IM', 'HM'])
+
+    def test_unknown_text_after_known_alphabetical(self):
+        self.assertEqual(self._sorted(['ZZ', 'HM', 'IM']),
+                         ['IM', 'HM', 'ZZ'])
+
+    def test_blank_rank_does_not_crash(self):
+        # empty/None ranks are treated as text, sorted last — must not raise
+        self.assertEqual(self._sorted(['1', '', None]), ['1', '', None])
 
 
 def make_tournament(tid, name="T", date="2024-01-01"):
@@ -191,3 +224,56 @@ class DataVersionCacheTests(TestCase):
         view(rf.post('/x/'))
         view(rf.post('/x/'))
         self.assertEqual(calls['n'], 2, "POST must never be cached")
+
+
+class SeasonResultMutationTests(TestCase):
+    """Phase 2: inline rank edit + remove must persist, re-sort, and be
+    locked to superusers."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser('admin', 'a@x.com', 'pw')
+        self.season = PRSeason.objects.create(name='S1')
+        self.p1 = Player.objects.create(name='Aaa')
+        self.p2 = Player.objects.create(name='Bbb')
+        self.r1 = PRSeasonResult.objects.create(
+            pr_season=self.season, player=self.p1, rank='10')
+        self.r2 = PRSeasonResult.objects.create(
+            pr_season=self.season, player=self.p2, rank='2')
+
+    def test_update_persists_rank(self):
+        self.client.force_login(self.admin)
+        resp = self.client.post(
+            reverse('update_pr_result', args=[self.r1.id]), {'rank': '1'})
+        self.assertEqual(resp.status_code, 200)
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.rank, '1')
+
+    def test_blank_rank_is_ignored(self):
+        self.client.force_login(self.admin)
+        self.client.post(
+            reverse('update_pr_result', args=[self.r1.id]), {'rank': '  '})
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.rank, '10')  # unchanged
+
+    def test_remove_deletes_only_target(self):
+        self.client.force_login(self.admin)
+        resp = self.client.post(reverse('remove_pr_result', args=[self.r1.id]))
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(PRSeasonResult.objects.filter(id=self.r1.id).exists())
+        self.assertTrue(PRSeasonResult.objects.filter(id=self.r2.id).exists())
+
+    def test_mutations_require_superuser(self):
+        # not logged in → redirected, no change
+        resp = self.client.post(
+            reverse('update_pr_result', args=[self.r1.id]), {'rank': '1'})
+        self.assertEqual(resp.status_code, 302)
+        self.r1.refresh_from_db()
+        self.assertEqual(self.r1.rank, '10')
+
+        User = get_user_model()
+        plain = User.objects.create_user('plain', 'p@x.com', 'pw')
+        self.client.force_login(plain)
+        resp = self.client.post(reverse('remove_pr_result', args=[self.r1.id]))
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(PRSeasonResult.objects.filter(id=self.r1.id).exists())

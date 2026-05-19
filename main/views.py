@@ -10,13 +10,14 @@ from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeas
 from .forms import TournamentForm, PRSeasonForm, DuplicatePlayer, ConfirmMergeForm, PRSeasonResultForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
+from django.contrib.auth.decorators import user_passes_test
 from django.views import generic
-from django.views.generic import ListView, CreateView
+from django.views.generic import ListView, CreateView, UpdateView
 from django.views.generic.detail import DetailView
 from django.shortcuts import render, reverse, redirect
 from collections import namedtuple, defaultdict
 from django.urls import reverse_lazy
-from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch, Max
+from django.db.models import Count, Q, F, FloatField, Case, When, Value, Prefetch, Max, IntegerField
 from django.db.models.functions import Cast, Lower
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
@@ -346,38 +347,71 @@ def get_player_details(main_account, duplicate_account):
         return None
 
 
+# Season management is an admin-only tool. Match base.html's `is_superuser`
+# convention (the only staff are superusers).
+superuser_required = user_passes_test(lambda u: u.is_superuser)
+
+
+def _rank_sort_key(result):
+    """Order PR results: numeric ranks first (by value, so 2 < 10), then
+    text ranks. Known text ranks get an explicit precedence (IM before HM);
+    any other text falls back to alphabetical after those.
+    """
+    raw = (result.rank or '').strip()
+    if raw.isdigit():
+        return (0, int(raw), '')
+    known = {'IM': 0, 'HM': 1}
+    return (1, known.get(raw.upper(), 99), raw.upper())
+
+
+@superuser_required
 def add_player_to_season(request, season_id):
     season = get_object_or_404(PRSeason, id=season_id)
 
     if request.method == 'POST':
-        player_name = request.POST.get('player_name')
-        rank = request.POST.get('rank')
+        player_id = request.POST.get('player_id')
+        rank = (request.POST.get('rank') or '').strip()
 
-        # 1. Find the player (handling duplicates by taking the first match)
-        player = Player.objects.filter(name__iexact=player_name).first()
+        player = Player.objects.filter(id=player_id).first() if player_id else None
 
-        if player and rank:
-            # 2. Create the result entry
-            PRSeasonResult.objects.create(
-                pr_season=season,
-                player=player,  # Using 'player' as per the Choice error earlier
-                rank=rank
-            )
-            # 3. Success! Tell HTMX to refresh the dashboard
-            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
-        else:
-            # If player not found, you could send an error back,
-            # but for now, let's just refresh to see the state.
-            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
+        if not player:
+            return render(request, 'main/admin/partials/add_player_modal.html', {
+                'season': season,
+                'error': 'Select a player from the search results.',
+            })
+        if not rank:
+            return render(request, 'main/admin/partials/add_player_modal.html', {
+                'season': season,
+                'error': 'Enter a rank (a number, or a text rank like IM / HM).',
+            })
 
-    # GET logic (Broadened filter for Notable players)
-    players = Player.objects.filter(
-        Q(pr_eligible=True) | Q(pr_notable=True)
-    ).distinct().order_by('name')
+        # update_or_create avoids an IntegrityError on the
+        # unique_together(player, pr_season) constraint — re-adding a player
+        # simply updates their rank.
+        PRSeasonResult.objects.update_or_create(
+            pr_season=season, player=player, defaults={'rank': rank[:3]},
+        )
+        return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
 
     return render(request, 'main/admin/partials/add_player_modal.html', {
         'season': season,
-        'all_players': players,
+    })
+
+
+@superuser_required
+def pr_player_search(request):
+    """Live HTMX search for the add-player modal. Returns clickable rows that
+    carry the player's real ID (kills the duplicate-tag ambiguity the old
+    name-match had)."""
+    q = (request.GET.get('q') or '').strip()
+    players = (
+        Player.objects.filter(name__icontains=q)
+        .select_related('region_code')
+        .order_by(Lower('name'))[:8]
+        if len(q) >= 2 else []
+    )
+    return render(request, 'main/admin/partials/pr_player_search_results.html', {
+        'players': players,
     })
 
 
@@ -780,11 +814,14 @@ def pr_table(request):
     return render(request, 'main/pr-table.html', context)
 
 
-class PRSeasonListView(ListView):
+class PRSeasonListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
     model = PRSeason
     template_name = 'main/pr_season_list.html'
     context_object_name = 'seasons'
     ordering = ['-start_date']
+
+    def test_func(self):
+        return self.request.user.is_superuser
 
     def get_queryset(self):
         queryset = super().get_queryset()
@@ -804,11 +841,14 @@ class PRSeasonListView(ListView):
         return context
 
 
-class PRSeasonCreateView(CreateView):
+class PRSeasonCreateView(LoginRequiredMixin, UserPassesTestMixin, CreateView):
     model = PRSeason
     form_class = PRSeasonForm
     template_name = 'main/pr_season_form.html'
     success_url = reverse_lazy('pr_season_list')
+
+    def test_func(self):
+        return self.request.user.is_superuser
 
     def form_valid(self, form):
         # First, save the form as usual
@@ -829,15 +869,80 @@ class PRSeasonAdminDetailView(LoginRequiredMixin, UserPassesTestMixin, DetailVie
     context_object_name = 'season'
 
     def test_func(self):
-        return self.request.user.is_staff
+        return self.request.user.is_superuser
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        # Fetch results with rank, pre-loading player names for speed
-        context['ranked_players'] = PRSeasonResult.objects.filter(
-            pr_season=self.object
-        ).select_related('player').order_by('rank')
+        context['ranked_players'] = _sorted_season_results(self.object)
         return context
+
+
+def _sorted_season_results(season):
+    """CharField rank can't sort correctly in SQL (1, 10, 2, 3); sort in
+    Python so numeric ranks order by value and text ranks (IM/HM) fall
+    after them."""
+    results = list(
+        PRSeasonResult.objects.filter(pr_season=season).select_related('player')
+    )
+    return sorted(results, key=_rank_sort_key)
+
+
+def _render_ranked_tbody(request, season, saved_id=None):
+    """Re-render just the sorted table body — used by the inline edit and
+    remove actions so the list reorders immediately after a change.
+    `saved_id` flags the just-saved row so the template can flash it
+    (visible confirmation even when the sort order didn't change)."""
+    return render(request, 'main/admin/partials/pr_ranked_tbody.html', {
+        'season': season,
+        'ranked_players': _sorted_season_results(season),
+        'saved_id': saved_id,
+    })
+
+
+@superuser_required
+def update_pr_result(request, result_id):
+    result = get_object_or_404(
+        PRSeasonResult.objects.select_related('pr_season'), id=result_id
+    )
+    if request.method == 'POST':
+        rank = (request.POST.get('rank') or '').strip()[:3]
+        if rank:
+            result.rank = rank
+            result.save(update_fields=['rank'])
+    return _render_ranked_tbody(request, result.pr_season, saved_id=result.id)
+
+
+@superuser_required
+def remove_pr_result(request, result_id):
+    result = get_object_or_404(
+        PRSeasonResult.objects.select_related('pr_season'), id=result_id
+    )
+    season = result.pr_season
+    if request.method == 'POST':
+        result.delete()
+    return _render_ranked_tbody(request, season)
+
+
+class PRSeasonUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
+    model = PRSeason
+    form_class = PRSeasonForm
+    template_name = 'main/pr_season_form.html'
+    success_url = reverse_lazy('pr_season_list')
+
+    def test_func(self):
+        return self.request.user.is_superuser
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context['form_title'] = f'Edit Season: {self.object.name}'
+        context['form_action'] = reverse('pr_season_edit', args=[self.object.pk])
+        return context
+
+    def form_valid(self, form):
+        self.object = form.save()
+        if self.request.headers.get('HX-Request'):
+            return HttpResponse(status=204, headers={'HX-Refresh': 'true'})
+        return super().form_valid(form)
 
 
 MIN_SETS_FOR_WIN_RATE = 10
@@ -1395,8 +1500,20 @@ class AnalyticsPlayerSearchView(generic.TemplateView):
         context = super().get_context_data(**kwargs)
         q = self.request.GET.get('q', '').strip()
         num = self.request.GET.get('num', '1')
-        players = (Player.objects.filter(name__icontains=q).select_related('region_code').order_by('name')[:8]
-                   if len(q) >= 2 else [])
+        # Michigan-region players (region 7) float to the top — this is a
+        # Michigan scene site, so a search for "rob" should surface the local
+        # Rob before out-of-state/unknown ones. Alphabetical within each group.
+        players = (
+            Player.objects.filter(name__icontains=q)
+            .select_related('region_code')
+            .annotate(_mi_rank=Case(
+                When(region_code_id=MICHIGAN_REGION_CODE, then=Value(0)),
+                default=Value(1),
+                output_field=IntegerField(),
+            ))
+            .order_by('_mi_rank', Lower('name'))[:8]
+            if len(q) >= 2 else []
+        )
         context.update({'players': players, 'num': num})
         return context
 

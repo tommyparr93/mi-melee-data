@@ -9,7 +9,7 @@
 
 <style>
     .journey-hero {
-        position: relative; overflow: hidden;
+        position: relative; overflow: visible;
         background:
             radial-gradient(1100px 320px at 90% -10%, rgba(59,130,246,0.35), transparent 60%),
             radial-gradient(700px 220px at 10% 120%, rgba(99,102,241,0.28), transparent 60%),
@@ -22,6 +22,7 @@
     }
     .journey-hero::before {
         content: ''; position: absolute; inset: 0;
+        border-radius: inherit;
         background-image:
             linear-gradient(to right, rgba(255,255,255,0.04) 1px, transparent 1px),
             linear-gradient(to bottom, rgba(255,255,255,0.04) 1px, transparent 1px);
@@ -29,6 +30,7 @@
         mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 80%);
         -webkit-mask-image: radial-gradient(ellipse at top right, #000 30%, transparent 80%);
         pointer-events: none;
+        overflow: hidden;
     }
     .journey-hero > * { position: relative; }
     .journey-hero .hero-eyebrow {

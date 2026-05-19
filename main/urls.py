@@ -1,6 +1,6 @@
 from django.urls import path
 from . import views
-from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView, HomeView
+from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView, PRSeasonUpdateView, HomeView
 
 urlpatterns = [
     path('', HomeView.as_view(), name='home'),
@@ -20,6 +20,10 @@ urlpatterns = [
     path('seasons/add/', PRSeasonCreateView.as_view(), name='pr_season_create'),
     path('seasons/manage/<int:pk>/', PRSeasonAdminDetailView.as_view(), name='pr_season_admin_detail'),
     path('seasons/manage/<int:season_id>/add-player/', views.add_player_to_season, name='add_player_to_season'),
+    path('seasons/player-search/', views.pr_player_search, name='pr_player_search'),
+    path('seasons/manage/<int:pk>/edit/', PRSeasonUpdateView.as_view(), name='pr_season_edit'),
+    path('seasons/result/<int:result_id>/update/', views.update_pr_result, name='update_pr_result'),
+    path('seasons/result/<int:result_id>/remove/', views.remove_pr_result, name='remove_pr_result'),
     path('analytics/', views.AnalyticsView.as_view(), name='analytics'),
     path('analytics/tab/records/', views.AnalyticsRecordsView.as_view(), name='analytics_records'),
     path('analytics/tab/pr/', views.AnalyticsPRView.as_view(), name='analytics_pr'),

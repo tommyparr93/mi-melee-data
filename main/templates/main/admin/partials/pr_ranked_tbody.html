@@ -1,0 +1,32 @@
+<tbody id="pr-list-body">
+    {% for result in ranked_players %}
+    <tr {% if saved_id and result.id == saved_id %}class="pr-row-saved"{% endif %}>
+        <td class="ps-4">
+            <form hx-post="{% url 'update_pr_result' result.id %}"
+                  hx-target="#pr-list-body" hx-swap="outerHTML"
+                  hx-disabled-elt="find button"
+                  class="d-flex align-items-center gap-1 m-0">
+                {% csrf_token %}
+                <input type="text" name="rank" value="{{ result.rank }}"
+                       maxlength="3" class="form-control form-control-sm"
+                       style="width: 56px;" aria-label="Rank for {{ result.player.name }}">
+                <button type="submit" class="btn btn-sm btn-primary">Save</button>
+            </form>
+        </td>
+        <td><strong>{{ result.player.name }}</strong></td>
+        <td class="text-end pe-4">
+            <button type="button" class="btn btn-sm btn-outline-danger"
+                    hx-post="{% url 'remove_pr_result' result.id %}"
+                    hx-target="#pr-list-body" hx-swap="outerHTML"
+                    hx-headers='{"X-CSRFToken": "{{ csrf_token }}"}'
+                    hx-confirm="Remove {{ result.player.name }} from this season?">
+                Remove
+            </button>
+        </td>
+    </tr>
+    {% empty %}
+    <tr>
+        <td colspan="3" class="text-center py-4 text-muted">No players added to this season yet.</td>
+    </tr>
+    {% endfor %}
+</tbody>

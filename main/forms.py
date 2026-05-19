@@ -56,7 +56,12 @@ class PRSeasonResultForm(forms.ModelForm):
         model = PRSeasonResult
         fields = ['rank']
         widgets = {
-            'rank': forms.NumberInput(attrs={'class': 'form-control', 'min': '1'}),
+            # Rank is usually a number but may be a text tier (e.g. IM, HM),
+            # so it must be a free text field, capped to the model's max_length.
+            'rank': forms.TextInput(attrs={
+                'class': 'form-control', 'maxlength': '3',
+                'placeholder': '1 or IM / HM',
+            }),
         }
 
     def clean_player_name(self):

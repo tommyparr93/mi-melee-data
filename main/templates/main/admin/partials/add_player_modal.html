@@ -9,52 +9,42 @@
                 <button type="button" class="btn-close btn-close-white" onclick="document.getElementById('modal-container').innerHTML=''"></button>
             </div>
 
-            <form hx-post="{% url 'add_player_to_season' season.id %}" hx-target="#modal-container">
+            <form hx-post="{% url 'add_player_to_season' season.id %}"
+                  hx-target="#modal-container" hx-swap="innerHTML">
                 {% csrf_token %}
 
                 <div class="modal-body">
-                    <p class="text-muted small mb-4">Search for an eligible player and assign them a rank for this season.</p>
+                    {% if error %}
+                        <div class="alert alert-danger py-2 small">{{ error }}</div>
+                    {% endif %}
 
-                    <div class="mb-3">
-                        <label for="player_name_input" class="form-label fw-bold">Player Tag</label>
-                        <input type="text"
-                               id="player_name_input"
-                               name="player_name"
-                               list="player-datalist"
-                               class="form-control {% if form.player_name.errors %}is-invalid{% endif %}"
-                               placeholder="Start typing tag (e.g. Mango)..."
+                    <p class="text-muted small mb-3">Search for a player, click to select them, then assign a rank.</p>
+
+                    <div class="mb-2">
+                        <label for="pr-player-search" class="form-label fw-bold">Player</label>
+                        <input type="text" id="pr-player-search" class="form-control"
+                               placeholder="Type at least 2 letters of a tag..."
                                autocomplete="off"
-                               required>
-
-                        <datalist id="player-datalist">
-                            {% for p in all_players %}
-                                <option value="{{ p.name }}">
-                            {% endfor %}
-                        </datalist>
-
-                        {% if form.player_name.errors %}
-                            <div class="invalid-feedback d-block">
-                                {{ form.player_name.errors.0 }}
-                            </div>
-                        {% endif %}
+                               hx-get="{% url 'pr_player_search' %}"
+                               hx-trigger="keyup changed delay:250ms"
+                               hx-target="#pr-search-results"
+                               name="q">
+                        <div id="pr-search-results" class="list-group mt-1"
+                             style="max-height:220px; overflow-y:auto;"></div>
                     </div>
 
-                    <div class="mb-3">
-                        <label for="{{ form.rank.id_for_label }}" class="form-label fw-bold">Assigned Rank</label>
-                        <div class="input-group">
-                            <span class="input-group-text">#</span>
-                            <input type="number"
-                                   name="rank"
-                                   class="form-control {% if form.rank.errors %}is-invalid{% endif %}"
-                                   placeholder="1"
-                                   min="1"
-                                   required>
-                        </div>
-                        {% if form.rank.errors %}
-                            <div class="invalid-feedback d-block">
-                                {{ form.rank.errors.0 }}
-                            </div>
-                        {% endif %}
+                    <div id="pr-selected" class="alert alert-light border py-2 small mb-3 d-none">
+                        Selected: <strong id="pr-selected-name"></strong>
+                    </div>
+                    <input type="hidden" name="player_id" id="pr-player-id">
+
+                    <div class="mb-1">
+                        <label for="pr-rank-input" class="form-label fw-bold">Assigned Rank</label>
+                        <input type="text" name="rank" id="pr-rank-input"
+                               class="form-control" maxlength="3"
+                               placeholder="1  (or a text rank like IM / HM)"
+                               autocomplete="off" required>
+                        <div class="form-text">Numbers sort first (1, 2 … 10), then text ranks.</div>
                     </div>
                 </div>
 
@@ -62,7 +52,7 @@
                     <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-container').innerHTML=''">
                         Cancel
                     </button>
-                    <button type="submit" class="btn btn-success px-4">
+                    <button type="submit" class="btn btn-success px-4" id="pr-add-submit" disabled>
                         Add to PR List
                     </button>
                 </div>
@@ -72,5 +62,17 @@
 </div>
 
 <script>
-    document.getElementById('player_name_input').focus();
+    (function () {
+        var search = document.getElementById('pr-player-search');
+        if (search) { search.focus(); }
+    })();
+
+    function selectPRPlayer(id, name) {
+        document.getElementById('pr-player-id').value = id;
+        document.getElementById('pr-selected-name').textContent = name;
+        document.getElementById('pr-selected').classList.remove('d-none');
+        document.getElementById('pr-search-results').innerHTML = '';
+        document.getElementById('pr-player-search').value = name;
+        document.getElementById('pr-add-submit').disabled = false;
+    }
 </script>

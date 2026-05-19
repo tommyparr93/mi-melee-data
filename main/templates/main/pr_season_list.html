@@ -43,7 +43,8 @@
                     </td>
                     <td>{{ season.start_date }} to {{ season.end_date }}</td>
                     <td class="text-end">
-                        <a href="{% url 'admin:main_prseason_change' season.pk %}" class="btn btn-sm btn-outline-secondary">Edit</a>
+                        <button hx-get="{% url 'pr_season_edit' season.pk %}" hx-target="#modal-container"
+                                class="btn btn-sm btn-outline-secondary">Edit</button>
                     </td>
                 </tr>
                 {% endfor %}

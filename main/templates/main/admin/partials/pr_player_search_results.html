@@ -1,0 +1,13 @@
+{% for player in players %}
+<button type="button" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+        onclick="selectPRPlayer({{ player.id }}, '{{ player.name|escapejs }}')">
+    <span class="fw-bold">{{ player.name }}</span>
+    {% if player.region_code %}
+        <small class="text-muted">{{ player.region_code.name }}</small>
+    {% endif %}
+</button>
+{% empty %}
+{% if request.GET.q %}
+<div class="list-group-item text-muted small">No players found.</div>
+{% endif %}
+{% endfor %}
