@@ -32,7 +32,7 @@
       <a class="nav-link link-light" href="{% url 'pr_eligible_players' %}">PR Shortlist</a>
     </li>
     <li class="nav-item">
-      <a class="nav-link link-light" href="{% url 'pr_season_details' 2 %}">Current MI PR</a>
+      <a class="nav-link link-light" href="{% if current_mi_pr_season %}{% url 'pr_season_details' current_mi_pr_season.id %}{% else %}{% url 'pr_season_details' 2 %}{% endif %}">Current MI PR</a>
     </li>
     <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'pr_table' %}">PR H2H Table</a>
@@ -53,6 +53,7 @@
         <ul class="dropdown-menu">
           <li><a class="dropdown-item" href="{% url 'tournament_form' %}">Tournament Form</a></li>
           <li><a class="dropdown-item" href="{% url 'join_duplicate' %}">Duplicate Account Tool</a></li>
+          <li><a class="dropdown-item" href="{% url 'pr_season_list' %}">PR Seasons</a></li>
         </ul>
        {% endif %}
      </li>
