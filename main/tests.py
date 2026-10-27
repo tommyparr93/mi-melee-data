@@ -483,3 +483,102 @@ class PublicPrSeasonPageOrderTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual([m.rank for m in resp.context['pr_members']],
                          ['1', '2', '10', '11', 'HM', 'IM'])
+
+
+from main.models import Region as _Region, Character as _Character
+from main.views import (
+    _season_page_context as _season_ctx,
+    _sorted_season_results as _sorted_results,
+    _clean_player_tag as _clean_tag,
+)
+
+
+class CleanPlayerTagTests(SimpleTestCase):
+    def test_strips_imported_ssbm_rank_suffix(self):
+        self.assertEqual(_clean_tag('Ossify (#20, SSBM Rank 2025)'), 'Ossify')
+        self.assertEqual(_clean_tag('ckyulmiqnudaetr (#29, SSBM Rank 2024)'), 'ckyulmiqnudaetr')
+
+    def test_leaves_normal_and_odd_names_alone(self):
+        self.assertEqual(_clean_tag('Negat!ve'), 'Negat!ve')
+        self.assertEqual(_clean_tag('mACOMBFALCO13 (bozo jr)'), 'mACOMBFALCO13 (bozo jr)')
+        self.assertEqual(_clean_tag(None), '')
+
+
+class SeasonPageContextTests(TestCase):
+    """Movement vs the previous season, season records, grouping, and the
+    season picker for the public PR season page."""
+
+    def setUp(self):
+        _Region.objects.create(id=7, name='Michigan')
+        self.prev = PRSeason.objects.create(
+            name='Prev', start_date=_dt.date(2025, 1, 1), end_date=_dt.date(2025, 6, 30), region_code_id=7)
+        self.cur = PRSeason.objects.create(
+            name='Cur', start_date=_dt.date(2025, 7, 1), end_date=_dt.date(2025, 12, 31), region_code_id=7)
+        fox = _Character.objects.create(name='Fox', icon_path='/static/fox.png')
+        self.p = {n: Player.objects.create(name=n, main_char=fox if n == 'A' else None) for n in 'ABCDEF'}
+        for player, rank in (('A', '1'), ('B', '2'), ('C', '3'), ('D', 'HM')):
+            PRSeasonResult.objects.create(pr_season=self.prev, player=self.p[player], rank=rank)
+        for player, rank in (('B', '1'), ('A', '2'), ('C', '3'), ('D', '4'), ('E', '5'), ('F', 'HM')):
+            PRSeasonResult.objects.create(pr_season=self.cur, player=self.p[player], rank=rank)
+
+    def _ctx(self):
+        return _season_ctx(self.cur, _sorted_results(self.cur))
+
+    def test_grouping_and_order(self):
+        ctx = self._ctx()
+        self.assertEqual([e['name'] for e in ctx['podium']], ['B', 'A', 'C'])
+        self.assertEqual([e['name'] for e in ctx['ranked']], ['D', 'E'])
+        self.assertEqual([e['name'] for e in ctx['honorable']], ['F'])
+        self.assertEqual(ctx['inactive'], [])
+        self.assertEqual(ctx['ranked_count'], 5)
+
+    def test_movement_versus_previous_season(self):
+        ctx = self._ctx()
+        self.assertEqual(ctx['prev_season'], self.prev)
+        b, a, c = ctx['podium']
+        self.assertEqual((b['move']['kind'], b['move']['value']), ('up', 1))
+        self.assertEqual((a['move']['kind'], a['move']['value']), ('down', 1))
+        self.assertEqual(c['move']['kind'], 'same')
+        d, e = ctx['ranked']
+        self.assertEqual((d['move']['kind'], d['move']['label']), ('from', 'from HM'))
+        self.assertEqual(e['move']['kind'], 'new')
+        self.assertIsNone(ctx['honorable'][0]['move'])      # mentions never show movement
+
+    def test_no_previous_season_means_no_movement(self):
+        ctx = _season_ctx(self.prev, _sorted_results(self.prev))
+        self.assertIsNone(ctx['prev_season'])
+        self.assertTrue(all(e['move'] is None for e in ctx['podium']))
+
+    def test_season_record_counts_only_eligible_sets_at_tagged_tournaments(self):
+        t = Tournament.objects.create(id=1, name='T', date=_dt.date(2025, 8, 1), pr_season=self.cur)
+        other = Tournament.objects.create(id=2, name='Other', date=_dt.date(2025, 2, 1), pr_season=self.prev)
+        a, b = self.p['A'], self.p['B']
+        make_set(1, b, a, b, t)                          # B beats A
+        make_set(2, b, a, b, t)                          # B beats A
+        make_set(3, a, b, a, t)                          # A beats B
+        make_set(4, b, a, b, t, pr_eligible=False)       # not PR-eligible: ignored
+        make_set(5, b, a, b, other)                      # different season: ignored
+        ctx = self._ctx()
+        by_name = {e['name']: e for e in ctx['podium']}
+        self.assertEqual((by_name['B']['wins'], by_name['B']['losses'], by_name['B']['win_pct']), (2, 1, 67))
+        self.assertEqual((by_name['A']['wins'], by_name['A']['losses']), (1, 2))
+        self.assertEqual(by_name['B']['events'], 1)
+        self.assertIsNone(by_name['C']['win_pct'])       # no sets: no record shown
+
+    def test_character_icon_and_name_are_exposed(self):
+        a = next(e for e in self._ctx()['podium'] if e['name'] == 'A')
+        self.assertEqual((a['icon'], a['char']), ('/static/fox.png', 'Fox'))
+
+    def test_picker_includes_current_season_even_when_it_has_no_results(self):
+        empty = PRSeason.objects.create(
+            name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30), region_code_id=7)
+        ids = [s['id'] for s in _season_ctx(empty, [])['season_nav']]
+        self.assertIn(empty.id, ids)
+        self.assertIn(self.cur.id, ids)
+
+    def test_page_renders_for_a_season_and_for_an_empty_one(self):
+        self.assertEqual(self.client.get(f'/pr_season/{self.cur.pk}').status_code, 200)
+        empty = PRSeason.objects.create(name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30))
+        resp = self.client.get(f'/pr_season/{empty.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, "haven't been published yet")

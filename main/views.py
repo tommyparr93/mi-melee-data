@@ -613,7 +613,9 @@ class PrSeasonDetailView(DetailView):
         context['pr_season'] = pr_season
         # Rank is a text column (it can hold HM/IM), so sort in Python:
         # 1, 2 ... 10, then HM, then IM. No ordering here showed arbitrary order.
-        context['pr_members'] = _sorted_season_results(pr_season)
+        results = _sorted_season_results(pr_season)
+        context['pr_members'] = results
+        context.update(_season_page_context(pr_season, results))
         return context
 
 
@@ -884,9 +886,111 @@ def _sorted_season_results(season):
     Python so numeric ranks order by value and text ranks (IM/HM) fall
     after them."""
     results = list(
-        PRSeasonResult.objects.filter(pr_season=season).select_related('player')
+        PRSeasonResult.objects.filter(pr_season=season)
+        .select_related('player__main_char')
     )
     return sorted(results, key=_rank_sort_key)
+
+
+# Some players carry an imported "(#20, SSBM Rank 2025)" suffix in their stored
+# name. It's noise on a rankings page, so strip it for display only.
+_TAG_ANNOTATION = re.compile(r'\s*\(#\d+,\s*SSBM Rank\s*\d{4}\)\s*$')
+
+
+def _clean_player_tag(name):
+    cleaned = _TAG_ANNOTATION.sub('', name or '').strip()
+    return cleaned or (name or '')
+
+
+def _season_page_context(season, results):
+    """Everything the public season page shows, beyond the sorted results:
+    character icons, each player's season record, movement since the previous
+    season, and the groupings (podium / ranked / honorable / inactive)."""
+    player_ids = [r.player_id for r in results]
+    id_set = set(player_ids)
+
+    # Season record: PR-eligible sets at tournaments tagged to this season,
+    # the same definition the PR head-to-head matrix uses.
+    wins, losses, events = defaultdict(int), defaultdict(int), defaultdict(set)
+    if player_ids:
+        season_sets = Set.objects.filter(
+            Q(player1_id__in=player_ids) | Q(player2_id__in=player_ids),
+            tournament__pr_season_id=season.pk, pr_eligible=True,
+        ).values('player1_id', 'player2_id', 'winner_id', 'tournament_id')
+        for s in season_sets:
+            if s['winner_id'] is None:
+                continue
+            for pid in (s['player1_id'], s['player2_id']):
+                if pid in id_set:
+                    (wins if s['winner_id'] == pid else losses)[pid] += 1
+                    events[pid].add(s['tournament_id'])
+
+    # Previous finished season in the same region that has results, for movement.
+    prev = None
+    if season.start_date:
+        prev = (PRSeason.objects
+                .filter(region_code_id=season.region_code_id,
+                        start_date__lt=season.start_date,
+                        prseasonresult__isnull=False)
+                .order_by('-start_date').distinct().first())
+    prev_rank = ({r.player_id: (r.rank or '').strip()
+                  for r in PRSeasonResult.objects.filter(pr_season=prev)}
+                 if prev else {})
+
+    def build(r):
+        raw = (r.rank or '').strip()
+        p = r.player
+        mc = p.main_char
+        w, l = wins.get(p.id, 0), losses.get(p.id, 0)
+        total = w + l
+        entry = {
+            'rank': raw,
+            'is_number': raw.isdigit(),
+            'player': p,
+            'name': _clean_player_tag(p.name),
+            'icon': mc.icon_path if mc and mc.icon_path else '',
+            'char': mc.name if mc else '',
+            'wins': w, 'losses': l,
+            'win_pct': round(100 * w / total) if total else None,
+            'events': len(events.get(p.id, ())),
+            'move': None,
+        }
+        if entry['is_number'] and prev:
+            before = prev_rank.get(p.id)
+            if before is None:
+                entry['move'] = {'kind': 'new', 'label': 'NEW'}
+            elif before.isdigit():
+                delta = int(before) - int(raw)          # positive = moved up
+                entry['move'] = {'kind': 'up' if delta > 0 else 'down' if delta < 0 else 'same',
+                                 'value': abs(delta)}
+            else:
+                entry['move'] = {'kind': 'from', 'label': f'from {before.upper()}'}
+        return entry
+
+    entries = [build(r) for r in results]
+    numbered = [e for e in entries if e['is_number']]
+    honorable = [e for e in entries if e['rank'].upper() == 'HM']
+    inactive = [e for e in entries if e['rank'].upper() == 'IM']
+    other = [e for e in entries if not e['is_number'] and e['rank'].upper() not in ('HM', 'IM')]
+
+    # Seasons with published results, plus the one being viewed (so the picker
+    # always shows the right season, even if it has no results yet).
+    season_nav = list(PRSeason.objects
+                      .filter(Q(prseasonresult__isnull=False) | Q(pk=season.pk),
+                              region_code_id=season.region_code_id)
+                      .order_by('-start_date').distinct().values('id', 'name'))
+
+    return {
+        'podium': numbered[:3],
+        'ranked': numbered[3:],
+        'honorable': honorable,
+        'inactive': inactive,
+        'other_listed': other,
+        'ranked_count': len(numbered),
+        'has_results': bool(entries),
+        'prev_season': prev,
+        'season_nav': season_nav,
+    }
 
 
 def _render_ranked_tbody(request, season, saved_id=None):
