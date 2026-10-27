@@ -653,20 +653,20 @@ class JourneyDataViewTests(TestCase):
     def test_display_name_drops_the_imported_annotation(self):
         self.assertEqual(self._get().context['player_display_name'], 'Me')
 
-    def test_renders_year_pills_and_no_pr_tracker_without_pr_history(self):
+    def test_renders_year_pills_and_no_pr_card_without_pr_history(self):
         resp = self._get('&year=2025')
         self.assertContains(resp, 'jy-btn')
         self.assertContains(resp, 'id="card-twins"')
-        self.assertNotContains(resp, 'Power Ranking Tracker')
+        self.assertNotContains(resp, 'id="card-pr"')
 
-    def test_renders_pr_tracker_when_the_player_has_pr_history(self):
+    def test_renders_compact_pr_card_when_the_player_has_pr_history(self):
         season = PRSeason.objects.create(
             name='2025 Summer Power Rankings', start_date=_dt.date(2025, 4, 1),
             end_date=_dt.date(2025, 9, 30), region_code_id=7)
         PRSeasonResult.objects.create(pr_season=season, player=self.me, rank='2')
         resp = self._get()
-        self.assertContains(resp, 'Power Ranking Tracker')
-        self.assertContains(resp, '2025 Summer')                  # " Power Rankings" trimmed for display
+        self.assertContains(resp, 'id="card-pr"')           # compact card, hidden until a PR season finishes
+        self.assertContains(resp, '2025 Summer')                  # season name (" Power Rankings" trimmed) is in the PR data
         self.assertEqual(resp.context['pr_summary']['best']['label'], '#2')
 
 

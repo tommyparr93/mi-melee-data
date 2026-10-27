@@ -40,6 +40,16 @@
                     <small class="stat-sub" id="info-last-twin"></small>
                 </div>
             </div>
+            {% if pr_summary %}
+            <div class="journey-stat-card stat-pr" id="card-pr" hidden>
+                <div class="stat-bar"></div>
+                <div>
+                    <div class="stat-label">Best PR So Far</div>
+                    <div class="stat-value"><span id="info-best-pr">&ndash;</span></div>
+                    <small class="stat-sub" id="info-best-pr-season"></small>
+                </div>
+            </div>
+            {% endif %}
             <div class="journey-stat-card">
                 <div class="stat-bar"></div>
                 <div>
@@ -72,44 +82,6 @@
     {% for y in years %}
     <button type="button" class="jy-btn {% if y.year == selected_year %}active{% endif %}" onclick="loadJourney({{ player.id }}, {{ y.year }})">{{ y.year }} <small>{{ y.count }}</small></button>
     {% endfor %}
-</div>
-{% endif %}
-
-{% if pr_summary %}
-<div class="pr-tracker" id="pr-tracker">
-    <div class="pt-head">
-        <span class="pt-title">Power Ranking Tracker</span>
-        <span class="pt-sub">
-            {{ pr_summary.ranked_seasons }} ranked season{{ pr_summary.ranked_seasons|pluralize }}{% if pr_summary.appearances > pr_summary.ranked_seasons %} &middot; {{ pr_summary.appearances }} total listing{{ pr_summary.appearances|pluralize }}{% endif %}
-        </span>
-    </div>
-    <div class="pt-stats">
-        <a class="pt-stat tier-{{ pr_summary.latest.tier }}" href="{% url 'pr_season_details' pr_summary.latest.season_id %}">
-            <span class="pt-k">{% if pr_summary.latest_is_current %}Current PR{% else %}Latest PR{% endif %}</span>
-            <span class="pt-v">{{ pr_summary.latest.label }}</span>
-            <span class="pt-s">{{ pr_summary.latest.short }}</span>
-        </a>
-        {% if pr_summary.best %}
-        <a class="pt-stat tier-{{ pr_summary.best.tier }}" href="{% url 'pr_season_details' pr_summary.best.season_id %}">
-            <span class="pt-k">Best PR</span>
-            <span class="pt-v">{{ pr_summary.best.label }}</span>
-            <span class="pt-s">{{ pr_summary.best.short }}</span>
-        </a>
-        {% endif %}
-        {% if pr_summary.number_ones %}
-        <div class="pt-stat tier-gold"><span class="pt-k">#1 seasons</span><span class="pt-v">{{ pr_summary.number_ones }}</span><span class="pt-s">&nbsp;</span></div>
-        {% endif %}
-        {% if pr_summary.top3 %}
-        <div class="pt-stat"><span class="pt-k">Top-3 finishes</span><span class="pt-v">{{ pr_summary.top3 }}</span><span class="pt-s">&nbsp;</span></div>
-        {% endif %}
-    </div>
-    <div class="pt-chips" id="pt-chips">
-        {% for s in pr_seasons %}
-        <a class="pt-chip tier-{{ s.tier }}" data-season="{{ s.season_id }}" href="{% url 'pr_season_details' s.season_id %}" title="{{ s.name }}">
-            <span class="pt-chip-rank">{{ s.label }}</span><span class="pt-chip-name">{{ s.short }}</span>
-        </a>
-        {% endfor %}
-    </div>
 </div>
 {% endif %}
 
@@ -466,9 +438,38 @@
                 host.innerHTML = '';
             }
         }
-        document.querySelectorAll('#pt-chips .pt-chip').forEach(c => {
-            c.classList.toggle('is-now', !!s && String(s.season_id) === c.dataset.season);
-        });
+        updateBestPrCard(d);
+    }
+
+    // "Best PR So Far": the best numbered ranking from PR seasons that had already
+    // finished before this tournament (ties go to the most recent season).
+    let shownBestRank = null;
+    function bestPrBefore(iso) {
+        if (!iso) return null;
+        let best = null;
+        for (const s of prSeasons) {                       // oldest first
+            if (!/^\d+$/.test(s.rank) || !s.end || s.end >= iso) continue;
+            if (!best || +s.rank <= +best.rank) best = s;
+        }
+        return best;
+    }
+    function updateBestPrCard(d) {
+        const card = document.getElementById('card-pr');
+        if (!card) return;
+        const best = bestPrBefore(d.date);
+        if (!best) { card.hidden = true; shownBestRank = null; return; }
+        const wasHidden = card.hidden;
+        const improved = shownBestRank !== null && +best.rank < shownBestRank;
+        document.getElementById('info-best-pr').textContent = '#' + best.rank;
+        const sub = document.getElementById('info-best-pr-season');
+        sub.textContent = best.short;
+        sub.title = best.name;
+        card.className = 'journey-stat-card stat-pr tier-' + prTier(best.rank);
+        card.hidden = false;
+        if (wasHidden || improved) {                       // animate when it appears or improves
+            card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
+        }
+        shownBestRank = +best.rank;
     }
 
     // ─── Panel, stat cards, timeline, scrubber ─────────────────
