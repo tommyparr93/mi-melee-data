@@ -73,6 +73,10 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'melee.urls'
 
+# Admin-only pages (e.g. /seasons/) redirect logged-out users here. The project
+# has no /accounts/login/ route (Django's default), so use the admin login.
+LOGIN_URL = '/admin/login/'
+
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',

@@ -381,3 +381,23 @@ class PullStartggLocationsSafetyTests(TestCase):
         self._run('--overwrite-text')
         t = Tournament.objects.get(id=5)
         self.assertEqual((t.city, t.state), ('Start.gg City', 'OH'))
+
+
+class SeasonAdminGatingTests(TestCase):
+    """Admin-only season tools must send logged-out users to the admin login
+    (the project has no /accounts/login/ route) and refuse non-superusers."""
+
+    def test_anonymous_redirected_to_admin_login(self):
+        resp = self.client.get('/seasons/')
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp['Location'].startswith('/admin/login/'))
+        self.assertIn('next=/seasons/', resp['Location'])
+
+    def test_non_superuser_forbidden_superuser_allowed(self):
+        User = get_user_model()
+        plain = User.objects.create_user('plain2', 'p2@x.com', 'pw')
+        self.client.force_login(plain)
+        self.assertEqual(self.client.get('/seasons/').status_code, 403)
+        admin = User.objects.create_superuser('admin2', 'a2@x.com', 'pw')
+        self.client.force_login(admin)
+        self.assertEqual(self.client.get('/seasons/').status_code, 200)
