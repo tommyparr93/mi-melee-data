@@ -1,3 +1,5 @@
+import os
+import tempfile
 import time
 import requests
 import datetime
@@ -24,6 +26,25 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         dry_run = options['dry_run']
+
+        # Only one sync at a time: a long catch-up run must not overlap with the
+        # daily cron run (they would race to ingest the same tournaments). The
+        # lock is released automatically when this process exits. fcntl is
+        # POSIX-only, so on a Windows dev machine this is simply skipped.
+        try:
+            import fcntl
+        except ImportError:
+            fcntl = None
+        if fcntl is not None:
+            self._lock_file = open(
+                os.path.join(tempfile.gettempdir(), 'sync_mi_tournaments.lock'), 'w')
+            try:
+                fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except OSError:
+                self.stdout.write(self.style.WARNING(
+                    'Another sync_mi_tournaments run is already in progress; exiting.'))
+                return
+
         # 1. Setup Environment and Token
         env = environ.Env()
         environ.Env.read_env()
