@@ -1,6 +1,9 @@
 {% extends 'base.html' %}
 {% block title %}Player Journey - Michigan Melee{% endblock %}
 
+{# Responsive layout opt-in for this page only (the rest of the site is unchanged). #}
+{% block extra_head %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
+
 {% block content %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
       integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
@@ -279,6 +282,148 @@
         content: ''; width: 9px; height: 9px; background: #fff;
         border-radius: 50%; transform: rotate(45deg);
     }
+
+    /* ── Venue dots: HTML markers (stable size while zooming), not SVG circles ── */
+    .venue-dot-wrap { background: transparent; border: none; }
+    .venue-dot {
+        box-sizing: border-box; border-radius: 50%; border: 2px solid #1f2937; opacity: 0.88;
+        display: flex; align-items: center; justify-content: center;
+        color: #fff; font-size: 11px; font-weight: 800; line-height: 1; text-shadow: 0 1px 2px rgba(0,0,0,0.55);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.35); transition: transform 0.12s ease;
+    }
+    .venue-dot.has-win { border: 3px solid #d99a00; }
+    .venue-dot-wrap:hover .venue-dot { transform: scale(1.12); opacity: 1; }
+    /* Route lines keep a constant on-screen width even while the SVG layer is scaled mid-zoom */
+    .leaflet-overlay-pane svg path { vector-effect: non-scaling-stroke; }
+
+    /* ── Tournament Wins card (appears at the first win, counts up) ── */
+    .journey-stat-card[hidden] { display: none !important; }
+    .journey-stat-card.stat-twins {
+        background: linear-gradient(135deg, #fffbeb 0%, #fff4c9 100%); border-color: #f6dd8b;
+    }
+    .stat-bar-gold { background: linear-gradient(180deg, #f5b301 0%, #d99a00 100%) !important; }
+    .journey-stat-card.stat-twins .stat-value { color: #b57a00; }
+    .journey-stat-card .stat-sub {
+        display: block; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        font-size: 0.62rem; color: #8a6a14; font-weight: 600; margin-top: 0.1rem;
+    }
+    .journey-stat-card.pop { animation: twinPop 0.6s ease; }
+    @keyframes twinPop {
+        0%   { transform: scale(0.9); box-shadow: 0 0 0 0 rgba(245,179,1,0.6); }
+        45%  { transform: scale(1.07); box-shadow: 0 0 0 10px rgba(245,179,1,0); }
+        100% { transform: scale(1); box-shadow: 0 4px 14px rgba(15,23,42,0.12); }
+    }
+    .info-panel .stat-block .value.is-first { color: #b57a00; }
+
+    /* ── Time frame (year) selector ── */
+    .journey-years {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.9rem;
+    }
+    .jy-label {
+        font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.8px;
+        color: #64748b; margin-right: 0.35rem;
+    }
+    .jy-btn {
+        border: 1px solid #dbe3ee; background: #fff; color: #334155; font-weight: 600; font-size: 0.82rem;
+        border-radius: 999px; padding: 0.3rem 0.85rem; cursor: pointer; transition: all 0.12s ease;
+    }
+    .jy-btn small { color: #94a3b8; font-weight: 600; margin-left: 0.25rem; font-size: 0.7rem; }
+    .jy-btn:hover { border-color: #93b4f5; background: #f5f9ff; }
+    .jy-btn.active { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+    .jy-btn.active small { color: #cfe0ff; }
+
+    /* ── PR tracker ── */
+    .pr-tracker {
+        background: #fff; border: 1px solid #e5e7eb; border-radius: 14px; padding: 0.9rem 1.1rem 0.8rem;
+        box-shadow: 0 4px 14px -10px rgba(15,23,42,0.3); margin-bottom: 1rem;
+    }
+    .pt-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.65rem; }
+    .pt-title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
+    .pt-sub { font-size: 0.76rem; color: #64748b; }
+    .pt-stats { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-bottom: 0.7rem; }
+    .pt-stat {
+        --tc: #0d6efd; display: flex; flex-direction: column; min-width: 120px; text-decoration: none; color: #0f172a;
+        background: #f8fafc; border: 1px solid #e5e7eb; border-left: 4px solid var(--tc); border-radius: 10px; padding: 0.45rem 0.85rem;
+    }
+    a.pt-stat:hover { background: #f1f5ff; text-decoration: none; color: #0f172a; }
+    .pt-stat.tier-gold { --tc: #f5b301; } .pt-stat.tier-silver { --tc: #94a3b8; }
+    .pt-stat.tier-bronze { --tc: #c4783a; } .pt-stat.tier-mention { --tc: #94a3b8; }
+    .pt-k { font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #64748b; }
+    .pt-v { font-size: 1.35rem; font-weight: 800; line-height: 1.1; font-variant-numeric: tabular-nums; }
+    .pt-s { font-size: 0.7rem; color: #64748b; }
+    .pt-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+    .pt-chip {
+        --tc: #cbd5e1; display: inline-flex; align-items: center; gap: 0.4rem; text-decoration: none; color: #334155;
+        font-size: 0.75rem; font-weight: 600; background: #fff; border: 1px solid #e2e8f0; border-radius: 999px;
+        padding: 0.2rem 0.7rem 0.2rem 0.2rem; transition: all 0.15s ease;
+    }
+    .pt-chip:hover { background: #f5f9ff; text-decoration: none; color: #0f172a; }
+    .pt-chip-rank {
+        min-width: 28px; text-align: center; border-radius: 999px; padding: 0.1rem 0.45rem; font-weight: 800;
+        background: var(--tc); color: #fff; font-size: 0.72rem; font-variant-numeric: tabular-nums;
+    }
+    .pt-chip.tier-gold { --tc: #e0a100; } .pt-chip.tier-silver { --tc: #8190a5; }
+    .pt-chip.tier-bronze { --tc: #b9733a; } .pt-chip.tier-ranked { --tc: #3b82f6; } .pt-chip.tier-mention { --tc: #94a3b8; }
+    .pt-chip.is-now { border-color: #0d6efd; box-shadow: 0 0 0 3px rgba(13,110,253,0.18); background: #f2f7ff; }
+
+    /* "PR at the time" chip in the info panel */
+    .info-pr { margin-bottom: 0.8rem; }
+    .pr-now {
+        --tc: #3b82f6; display: inline-flex; align-items: center; gap: 0.45rem; text-decoration: none;
+        font-size: 0.78rem; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0;
+        border-left: 4px solid var(--tc); border-radius: 8px; padding: 0.25rem 0.65rem;
+    }
+    .pr-now:hover { background: #f1f5ff; text-decoration: none; color: #0f172a; }
+    .pr-now b { font-size: 0.95rem; color: #0f172a; font-variant-numeric: tabular-nums; }
+    .pr-now-k { font-size: 0.6rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.7px; color: #64748b; }
+    .pr-now.tier-gold { --tc: #f5b301; } .pr-now.tier-silver { --tc: #94a3b8; }
+    .pr-now.tier-bronze { --tc: #c4783a; } .pr-now.tier-mention { --tc: #94a3b8; }
+
+    /* ── Scrubber ── */
+    .journey-scrub { margin-top: 0.85rem; }
+    #journey-slider { width: 100%; accent-color: #0d6efd; cursor: pointer; }
+    .scrub-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: #64748b; font-weight: 600; margin-top: 0.1rem; }
+    .scrub-labels #scrub-now { color: #0d6efd; font-weight: 700; }
+
+    /* ── Tournament timeline (jump anywhere) ── */
+    .journey-timeline {
+        margin-top: 1rem; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    .jt-head {
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center; justify-content: space-between;
+        padding: 0.7rem 1rem; border-bottom: 1px solid #eef1f5; background: #fafbfd;
+    }
+    .jt-title { font-size: 0.72rem; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #475569; }
+    .jt-count { background: #0d6efd; color: #fff; font-size: 0.65rem; border-radius: 999px; padding: 0.05rem 0.5rem; margin-left: 0.3rem; }
+    .jt-filter { border: 1px solid #dbe3ee; border-radius: 8px; padding: 0.3rem 0.7rem; font-size: 0.82rem; min-width: 220px; }
+    .jt-filter:focus { outline: none; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.25); }
+    .jt-list { position: relative; max-height: 340px; overflow-y: auto; }
+    .jt-month {
+        position: sticky; top: 0; z-index: 1; background: #f1f5f9; color: #475569; font-size: 0.68rem;
+        font-weight: 800; text-transform: uppercase; letter-spacing: 0.8px; padding: 0.3rem 1rem;
+    }
+    .jt-item {
+        display: grid; grid-template-columns: 62px minmax(0, 1fr) auto auto; gap: 0.75rem; align-items: center; width: 100%;
+        text-align: left; background: #fff; border: none; border-bottom: 1px solid #f1f5f9; border-left: 3px solid transparent;
+        padding: 0.5rem 1rem; cursor: pointer; transition: background 0.12s ease;
+    }
+    .jt-item:hover { background: #f5f9ff; }
+    .jt-item.done { border-left-color: #bfd4fb; }
+    .jt-item.active { background: #e7f0ff; border-left-color: #0d6efd; }
+    .jt-date { font-size: 0.76rem; color: #64748b; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .jt-main { min-width: 0; }
+    .jt-name { display: block; font-weight: 700; font-size: 0.88rem; color: #0f172a; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .jt-where { display: block; font-size: 0.72rem; color: #94a3b8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .jt-rec { font-size: 0.8rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .jt-badge { font-size: 0.68rem; font-weight: 800; color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0.1rem 0.5rem; min-width: 38px; text-align: center; }
+    .jt-badge.podium { background: #e8eef7; color: #334155; }
+    .jt-badge.win { background: linear-gradient(135deg, #f5b301, #ffd95a); color: #3b2a00; }
+    @media (max-width: 640px) {
+        .jt-item { grid-template-columns: 48px minmax(0, 1fr) auto; }
+        .jt-item .jt-rec { display: none; }
+        .jt-filter { min-width: 0; width: 100%; }
+    }
 </style>
 
 <!-- Hero / Player picker -->
@@ -323,11 +468,29 @@
 </div>
 
 <script>
+// Load (or reload) a journey, optionally narrowed to one year, and keep the
+// address bar in sync so any journey can be bookmarked or shared as a link.
+function loadJourney(id, year) {
+    let url = '{% url "journey_data" %}?player=' + id;
+    let shareUrl = '{% url "journey" %}?player=' + id;
+    if (year) { url += '&year=' + year; shareUrl += '&year=' + year; }
+    htmx.ajax('GET', url, '#journey-content');
+    try { history.replaceState(null, '', shareUrl); } catch (e) {}
+}
+
 function selectPlayer(num, id, name) {
     document.getElementById('journey-search').value = name;
     document.getElementById('journey-search-dropdown').innerHTML = '';
-    htmx.ajax('GET', '{% url "journey_data" %}?player=' + id, '#journey-content');
+    loadJourney(id, null);
 }
+
+{% if initial_player %}
+// Deep link: /journey/?player=<id>&year=<yyyy>
+document.addEventListener('DOMContentLoaded', function () {
+    document.getElementById('journey-search').value = '{{ initial_player_name|escapejs }}';
+    loadJourney({{ initial_player }}, {% if initial_year %}{{ initial_year }}{% else %}null{% endif %});
+});
+{% endif %}
 
 // Session-only home base. Stored on window so the (re-injected) map partial can read it.
 window.journeyHome = null;

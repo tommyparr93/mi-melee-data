@@ -8,9 +8,11 @@
     </div>
     <div class="col-12 col-xl">
         <h3 class="mb-0 fw-bold">
-            <a href="{% url 'player_detail' player.id %}" class="text-decoration-none text-dark">{{ player.name }}</a>
+            <a href="{% url 'player_detail' player.id %}" class="text-decoration-none text-dark">{{ player_display_name }}</a>
         </h3>
-        <small class="text-muted">{{ journey_count }} tournament{{ journey_count|pluralize }} on the map</small>
+        <small class="text-muted">
+            {{ journey_count }} tournament{{ journey_count|pluralize }} on the map{% if selected_year %} in {{ selected_year }} <span class="opacity-75">(of {{ total_journey_count }} total)</span>{% endif %}
+        </small>
     </div>
     <div class="col-12 col-xl-auto">
         <div class="journey-stat-row">
@@ -28,6 +30,14 @@
                     <div class="stat-value">
                         <span style="color:#198754" id="info-total-wins">0</span><span style="color:#94a3b8">–</span><span style="color:#dc3545" id="info-total-losses">0</span>
                     </div>
+                </div>
+            </div>
+            <div class="journey-stat-card stat-twins" id="card-twins" hidden>
+                <div class="stat-bar stat-bar-gold"></div>
+                <div>
+                    <div class="stat-label">Tournament Wins</div>
+                    <div class="stat-value"><span id="info-total-twins">0</span></div>
+                    <small class="stat-sub" id="info-last-twin"></small>
                 </div>
             </div>
             <div class="journey-stat-card">
@@ -55,6 +65,54 @@
     </div>
 </div>
 
+{% if years|length > 1 %}
+<div class="journey-years" role="group" aria-label="Choose a time frame">
+    <span class="jy-label">Time frame</span>
+    <button type="button" class="jy-btn {% if not selected_year %}active{% endif %}" onclick="loadJourney({{ player.id }}, null)">All time <small>{{ total_journey_count }}</small></button>
+    {% for y in years %}
+    <button type="button" class="jy-btn {% if y.year == selected_year %}active{% endif %}" onclick="loadJourney({{ player.id }}, {{ y.year }})">{{ y.year }} <small>{{ y.count }}</small></button>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if pr_summary %}
+<div class="pr-tracker" id="pr-tracker">
+    <div class="pt-head">
+        <span class="pt-title">Power Ranking Tracker</span>
+        <span class="pt-sub">
+            {{ pr_summary.ranked_seasons }} ranked season{{ pr_summary.ranked_seasons|pluralize }}{% if pr_summary.appearances > pr_summary.ranked_seasons %} &middot; {{ pr_summary.appearances }} total listing{{ pr_summary.appearances|pluralize }}{% endif %}
+        </span>
+    </div>
+    <div class="pt-stats">
+        <a class="pt-stat tier-{{ pr_summary.latest.tier }}" href="{% url 'pr_season_details' pr_summary.latest.season_id %}">
+            <span class="pt-k">{% if pr_summary.latest_is_current %}Current PR{% else %}Latest PR{% endif %}</span>
+            <span class="pt-v">{{ pr_summary.latest.label }}</span>
+            <span class="pt-s">{{ pr_summary.latest.short }}</span>
+        </a>
+        {% if pr_summary.best %}
+        <a class="pt-stat tier-{{ pr_summary.best.tier }}" href="{% url 'pr_season_details' pr_summary.best.season_id %}">
+            <span class="pt-k">Best PR</span>
+            <span class="pt-v">{{ pr_summary.best.label }}</span>
+            <span class="pt-s">{{ pr_summary.best.short }}</span>
+        </a>
+        {% endif %}
+        {% if pr_summary.number_ones %}
+        <div class="pt-stat tier-gold"><span class="pt-k">#1 seasons</span><span class="pt-v">{{ pr_summary.number_ones }}</span><span class="pt-s">&nbsp;</span></div>
+        {% endif %}
+        {% if pr_summary.top3 %}
+        <div class="pt-stat"><span class="pt-k">Top-3 finishes</span><span class="pt-v">{{ pr_summary.top3 }}</span><span class="pt-s">&nbsp;</span></div>
+        {% endif %}
+    </div>
+    <div class="pt-chips" id="pt-chips">
+        {% for s in pr_seasons %}
+        <a class="pt-chip tier-{{ s.tier }}" data-season="{{ s.season_id }}" href="{% url 'pr_season_details' s.season_id %}" title="{{ s.name }}">
+            <span class="pt-chip-rank">{{ s.label }}</span><span class="pt-chip-name">{{ s.short }}</span>
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
 {% if journey_count > 0 %}
 <div class="row g-3 mb-3">
     <div class="col-lg-8">
@@ -66,7 +124,8 @@
                 <div class="tourney-name" id="info-name">—</div>
                 <div class="tourney-date" id="info-date">—</div>
             </div>
-            <div class="text-muted small mb-3" id="info-location">—</div>
+            <div class="text-muted small mb-2" id="info-location">—</div>
+            <div id="info-pr" class="info-pr" style="display:none;"></div>
 
             <div class="row g-2 mb-3">
                 <div class="col-6">
@@ -118,9 +177,9 @@
 
 <div class="journey-controls">
     <div class="d-flex align-items-center gap-2 flex-wrap">
-        <button class="journey-btn" onclick="journeyPrev()" title="Previous">◀</button>
-        <button class="journey-btn primary" id="journey-play-btn" onclick="journeyToggle()" title="Play">▶</button>
-        <button class="journey-btn" onclick="journeyNext()" title="Next">▶▶</button>
+        <button class="journey-btn" onclick="journeyPrev()" title="Previous (Left arrow)">◀</button>
+        <button class="journey-btn primary" id="journey-play-btn" onclick="journeyToggle()" title="Play / pause (Space)">▶</button>
+        <button class="journey-btn" onclick="journeyNext()" title="Next (Right arrow)">▶▶</button>
 
         <span class="ms-3 me-2 text-muted small text-uppercase fw-bold" style="letter-spacing:0.5px; font-size:0.7rem;">Speed</span>
         <div class="btn-group btn-group-sm" role="group">
@@ -133,9 +192,22 @@
             <span id="journey-index">1</span> / <span id="journey-total">{{ journey_count }}</span>
         </div>
     </div>
+    <div class="journey-scrub">
+        <input type="range" id="journey-slider" min="0" max="{{ journey_count }}" value="0" step="1" aria-label="Scrub through the tournaments">
+        <div class="scrub-labels"><span id="scrub-start"></span><span id="scrub-now"></span><span id="scrub-end"></span></div>
+    </div>
+</div>
+
+<div class="journey-timeline">
+    <div class="jt-head">
+        <span class="jt-title">Jump to a tournament <span class="jt-count" id="jt-count">{{ journey_count }}</span></span>
+        <input type="search" id="jt-filter" class="jt-filter" placeholder="Find a tournament or city" autocomplete="off" aria-label="Filter tournaments">
+    </div>
+    <div class="jt-list" id="jt-list" role="listbox" aria-label="Tournaments in this journey"></div>
 </div>
 
 <script id="journey-payload" type="application/json">{{ journey_data|safe }}</script>
+<script id="pr-payload" type="application/json">{{ pr_data|safe }}</script>
 <script>
 (function() {
     // Tear down any prior map instance (HTMX re-injection)
@@ -145,16 +217,27 @@
     }
     if (window.journeyTimer) { clearTimeout(window.journeyTimer); window.journeyTimer = null; }
     if (window.journeyAnim) { cancelAnimationFrame(window.journeyAnim); window.journeyAnim = null; }
+    if (window.journeyKeyHandler) { document.removeEventListener('keydown', window.journeyKeyHandler); window.journeyKeyHandler = null; }
 
     const data = JSON.parse(document.getElementById('journey-payload').textContent);
     if (!data.length) return;
+    const prSeasons = JSON.parse(document.getElementById('pr-payload').textContent || '[]');
+    const PR_URL_BASE = "{% url 'pr_season_details' 0 %}".replace(/0$/, '');
 
     // Travel speed (ms per leg of journey, includes travel + dwell)
     const SPEED_MS = { 1: 2600, 2: 1400, 3: 700 };
     const TRAVEL_RATIO = 0.65;       // % of cycle spent traveling vs dwelling on a stop
     const HOME_DWELL_RATIO = 0.16;   // brief touch when passing through home
-    let currentSpeed = 2;
+    const LOCAL_ZOOM = 10;           // city-level zoom: where the camera sits while "at" a tournament
+    let currentSpeed = window.journeySpeed || 2;
     let isPlaying = false;
+
+    // Reflect a remembered speed choice (survives switching year / player)
+    document.querySelectorAll('[data-speed]').forEach(b => {
+        const on = +b.dataset.speed === currentSpeed;
+        b.classList.toggle('btn-primary', on);
+        b.classList.toggle('btn-outline-primary', !on);
+    });
 
     // ─── Haversine distance (miles) ────────────────────────────
     function haversineMiles(a, b) {
@@ -181,19 +264,23 @@
 
     // Running cumulative stats by chronological stop index (like total miles)
     const cumSets = [], cumOpponents = [], cumVenues = [], cumWins = [], cumLosses = [];
+    const cumTWins = [], lastTWin = [];     // tournament wins (placement 1st) so far, and the latest one's name
     (function() {
-        let sets = 0, wins = 0, losses = 0;
+        let sets = 0, wins = 0, losses = 0, twins = 0, lastWin = '';
         const seenOpps = new Set();
         const seenVenues = new Set();
         data.forEach((d, i) => {
             sets += (d.wins || 0) + (d.losses || 0);
             wins += (d.wins || 0);
             losses += (d.losses || 0);
+            if (d.placement === 1) { twins += 1; lastWin = d.name; }
             (d.opponent_ids || []).forEach(id => seenOpps.add(id));
             seenVenues.add(locKey(d));
             cumSets[i] = sets;
             cumWins[i] = wins;
             cumLosses[i] = losses;
+            cumTWins[i] = twins;
+            lastTWin[i] = lastWin;
             cumOpponents[i] = seenOpps.size;
             cumVenues[i] = seenVenues.size;
         });
@@ -205,6 +292,10 @@
         zoomAnimation: true,
         fadeAnimation: true,
         markerZoomAnimation: true,
+        keyboard: false,            // arrow keys step through tournaments instead of panning
+        // Extra margin around the route lines' SVG layer so they aren't cropped
+        // at the edges while the camera zooms.
+        renderer: L.svg({ padding: 0.6 }),
     });
     window.journeyMap = map;
     // OSM's tile policy requires a valid Referer. Django's default
@@ -225,29 +316,30 @@
     // Active leg polyline: just the 2 points of the current travel (constant per-frame cost)
     const activeLeg = L.polyline([], { color: '#0d6efd', weight: 4, opacity: 0.85, lineCap: 'round', lineJoin: 'round' }).addTo(map);
 
-    // Cluster markers (one per unique location, sized by event count)
+    // Venue markers (one per unique location, sized by event count; the number
+    // of events is printed inside). Venues where the player has won a
+    // tournament get a gold ring.
+    //
+    // These are HTML markers on purpose: SVG circles get CSS-scaled (and cropped
+    // at the layer's edges) while the camera zooms, whereas Leaflet repositions
+    // HTML markers every frame at a constant pixel size.
     Object.entries(locationGroups).forEach(([key, group]) => {
         const count = group.events.length;
-        const radius = Math.min(6 + Math.sqrt(count) * 4, 22);
+        const size = Math.round(Math.min(6 + Math.sqrt(count) * 4, 22) * 2);
         const totalW = group.events.reduce((s, e) => s + e.wins, 0);
         const totalL = group.events.reduce((s, e) => s + e.losses, 0);
         const wlColor = totalW > totalL ? '#198754' : (totalW < totalL ? '#dc3545' : '#6c757d');
+        const hasWin = group.events.some(e => e.placement === 1);
+        const label = count > 1 ? count : '';
 
-        const marker = L.circleMarker([group.lat, group.lng], {
-            radius: radius, color: '#1f2937', weight: 1.5,
-            fillColor: wlColor, fillOpacity: 0.75,
-        }).addTo(map);
-
-        if (count > 1) {
-            const badge = L.divIcon({
-                className: 'venue-count-badge',
-                html: `<span>${count}</span>`,
-                iconSize: [22, 22], iconAnchor: [11, 11],
-            });
-            L.marker([group.lat, group.lng], { icon: badge, interactive: false }).addTo(map);
-        }
-
-        marker.on('click', () => jumpToStop(group.events[0].originalIndex));
+        const icon = L.divIcon({
+            className: 'venue-dot-wrap',
+            html: `<div class="venue-dot${hasWin ? ' has-win' : ''}" style="width:${size}px;height:${size}px;background:${wlColor};">${label}</div>`,
+            iconSize: [size, size], iconAnchor: [size / 2, size / 2],
+        });
+        L.marker([group.lat, group.lng], { icon: icon, keyboard: false, riseOnHover: true })
+            .on('click', () => jumpToStop(group.events[0].originalIndex))
+            .addTo(map);
     });
 
     // Animated player marker (pulsing dot)
@@ -272,7 +364,6 @@
     let routePos = 0;
     let lastStopIdx = 0;
     let homeMode = false;
-    let zoomedOutForHop = false;  // true while camera is pulled back for a long trip
 
     function buildRoute() {
         const home = window.journeyHome;
@@ -304,7 +395,7 @@
         faintLine.setLatLngs(routePts);
         const pts = data.map(d => [d.lat, d.lng]);
         if (homeMode) pts.push([window.journeyHome.lat, window.journeyHome.lng]);
-        map.fitBounds(pts, { padding: [50, 50] });
+        map.fitBounds(pts, { padding: [50, 50], maxZoom: LOCAL_ZOOM });
 
         if (homeMarker) { map.removeLayer(homeMarker); homeMarker = null; }
         if (homeMode) {
@@ -326,8 +417,16 @@
     }
     function fmtDate(iso) {
         if (!iso) return '—';
-        const d = new Date(iso);
+        const d = new Date(iso + 'T12:00:00');
         return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    function fmtShort(iso) {
+        if (!iso) return '';
+        return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+    function fmtMonth(iso) {
+        if (!iso) return 'Undated';
+        return new Date(iso + 'T12:00:00').toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
     }
     function ordinal(n) {
         if (n == null) return '—';
@@ -339,6 +438,40 @@
     // Easing: smooth deceleration
     const easeInOutCubic = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
 
+    // ─── PR tracker: which PR season a given date falls in ─────
+    function prSeasonFor(iso) {
+        if (!iso) return null;
+        for (const s of prSeasons) {
+            if (s.start && s.end && iso >= s.start && iso <= s.end) return s;
+        }
+        return null;
+    }
+    function prTier(rank) {
+        if (rank === '1') return 'gold';
+        if (rank === '2') return 'silver';
+        if (rank === '3') return 'bronze';
+        return /^\d+$/.test(rank) ? 'ranked' : 'mention';
+    }
+    function updatePrNow(d) {
+        const host = document.getElementById('info-pr');
+        const s = prSeasonFor(d.date);
+        if (host) {
+            if (s) {
+                const label = /^\d+$/.test(s.rank) ? '#' + s.rank : s.rank;
+                host.style.display = 'block';
+                host.innerHTML = `<a class="pr-now tier-${prTier(s.rank)}" href="${PR_URL_BASE}${s.season_id}">
+                    <span class="pr-now-k">PR at the time</span><b>${escapeHtml(label)}</b><span>${escapeHtml(s.short)}</span></a>`;
+            } else {
+                host.style.display = 'none';
+                host.innerHTML = '';
+            }
+        }
+        document.querySelectorAll('#pt-chips .pt-chip').forEach(c => {
+            c.classList.toggle('is-now', !!s && String(s.season_id) === c.dataset.season);
+        });
+    }
+
+    // ─── Panel, stat cards, timeline, scrubber ─────────────────
     function updatePanel(stopIdx, opts) {
         opts = opts || {};
         const d = data[stopIdx];
@@ -356,7 +489,9 @@
         document.getElementById('info-location').textContent = (d.city + (d.state ? ', ' + d.state : '')) || '—';
         document.getElementById('info-wins').textContent = d.wins;
         document.getElementById('info-losses').textContent = d.losses;
-        document.getElementById('info-placement').textContent = ordinal(d.placement);
+        const placeEl = document.getElementById('info-placement');
+        placeEl.textContent = ordinal(d.placement);
+        placeEl.classList.toggle('is-first', d.placement === 1);
         document.getElementById('info-entrants').textContent = d.entrant_count || '—';
         document.getElementById('info-leg-label').textContent = homeMode ? 'Round Trip' : 'Leg Distance';
         document.getElementById('info-leg-miles').textContent = fmtMiles(legVal);
@@ -367,6 +502,29 @@
         document.getElementById('info-total-opponents').textContent = cumOpponents[stopIdx].toLocaleString();
         document.getElementById('info-total-venues').textContent = cumVenues[stopIdx].toLocaleString();
         document.getElementById('journey-index').textContent = stopIdx + 1;
+
+        // Tournament Wins card: appears at the player's first win, then counts up
+        const tw = cumTWins[stopIdx];
+        const card = document.getElementById('card-twins');
+        if (card) {
+            if (tw > 0) {
+                const valEl = document.getElementById('info-total-twins');
+                const before = card.hidden ? 0 : (+valEl.textContent || 0);
+                card.hidden = false;
+                valEl.textContent = tw;
+                const sub = document.getElementById('info-last-twin');
+                sub.textContent = lastTWin[stopIdx];
+                sub.title = lastTWin[stopIdx];
+                if (tw > before) {
+                    card.classList.remove('pop'); void card.offsetWidth; card.classList.add('pop');
+                }
+            } else {
+                card.hidden = true;
+            }
+        }
+
+        updatePrNow(d);
+        highlightStop(stopIdx);
 
         // Defer the heavy innerHTML rebuilds so they don't block the first animation frame
         const rebuild = () => {
@@ -403,6 +561,75 @@
             requestAnimationFrame(rebuild);
         }
     }
+
+    // Clickable list of every tournament in the journey, grouped by month
+    const jtList = document.getElementById('jt-list');
+    const jtItems = [];
+    function buildTimeline() {
+        let html = '', lastMonth = null;
+        data.forEach((d, i) => {
+            const month = d.date ? d.date.slice(0, 7) : 'none';
+            if (month !== lastMonth) {
+                html += `<div class="jt-month" data-month="${month}">${escapeHtml(fmtMonth(d.date))}</div>`;
+                lastMonth = month;
+            }
+            let badge = '';
+            if (d.placement === 1) badge = '<span class="jt-badge win">1st</span>';
+            else if (d.placement === 2 || d.placement === 3) badge = `<span class="jt-badge podium">${ordinal(d.placement)}</span>`;
+            else if (d.placement) badge = `<span class="jt-badge">${ordinal(d.placement)}</span>`;
+            const where = (d.city + (d.state ? ', ' + d.state : '')) || '';
+            html += `<button type="button" class="jt-item" role="option" data-idx="${i}" data-q="${escapeHtml((d.name + ' ' + where).toLowerCase())}">
+                <span class="jt-date">${escapeHtml(fmtShort(d.date))}</span>
+                <span class="jt-main"><span class="jt-name">${escapeHtml(d.name)}</span><span class="jt-where">${escapeHtml(where)}</span></span>
+                <span class="jt-rec"><span class="text-success">${d.wins}</span>&ndash;<span class="text-danger">${d.losses}</span></span>
+                ${badge}
+            </button>`;
+        });
+        jtList.innerHTML = html;
+        jtList.querySelectorAll('.jt-item').forEach(el => jtItems[+el.dataset.idx] = el);
+    }
+    jtList.addEventListener('click', (e) => {
+        const item = e.target.closest('.jt-item');
+        if (item) jumpToStop(+item.dataset.idx);
+    });
+    document.getElementById('jt-filter').addEventListener('input', (e) => {
+        const q = e.target.value.trim().toLowerCase();
+        let shown = 0;
+        jtItems.forEach(el => {
+            const hit = !q || el.dataset.q.includes(q);
+            el.style.display = hit ? '' : 'none';
+            if (hit) shown++;
+        });
+        jtList.querySelectorAll('.jt-month').forEach(m => { m.style.display = q ? 'none' : ''; });
+        document.getElementById('jt-count').textContent = q ? `${shown} of ${data.length}` : data.length;
+    });
+
+    let activeItem = null;
+    function highlightStop(stopIdx) {
+        if (activeItem) activeItem.classList.remove('active');
+        jtItems.forEach((el, i) => el.classList.toggle('done', i < stopIdx));
+        activeItem = jtItems[stopIdx];
+        if (activeItem) {
+            activeItem.classList.add('active');
+            // keep the active row in view inside the list (without scrolling the whole page)
+            const top = activeItem.offsetTop - jtList.clientHeight / 2 + activeItem.clientHeight / 2;
+            jtList.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+        }
+        const slider = document.getElementById('journey-slider');
+        if (slider && +slider.value !== stopIdx) slider.value = stopIdx;
+        document.getElementById('scrub-now').textContent = data[stopIdx].date ? fmtDate(data[stopIdx].date) : '';
+    }
+
+    const slider = document.getElementById('journey-slider');
+    slider.max = data.length - 1;
+    document.getElementById('scrub-start').textContent = fmtShort(data[0].date) + (data[0].date ? ' ' + data[0].date.slice(0, 4) : '');
+    document.getElementById('scrub-end').textContent = fmtShort(data[data.length - 1].date) + (data[data.length - 1].date ? ' ' + data[data.length - 1].date.slice(0, 4) : '');
+    slider.addEventListener('input', () => {                // live preview while dragging
+        const i = +slider.value;
+        document.getElementById('scrub-now').textContent = data[i].date ? fmtDate(data[i].date) : '';
+        document.getElementById('journey-index').textContent = i + 1;
+    });
+    slider.addEventListener('change', () => jumpToStop(+slider.value));   // jump on release
 
     function renderSets(d) {
         const sets = d.sets || [];
@@ -448,8 +675,23 @@
         completedLine.setLatLngs(routePts.slice(0, routeIdx + 1));
     }
 
-    // ─── Smooth animated travel between two route nodes ─────────
-    function animateTravel(fromRi, toRi, durationMs, onDone) {
+    // ─── Camera: "travel wide, arrive tight" ───────────────────
+    // While travelling a long leg the camera frames both ends so you can watch
+    // the trip. As soon as the marker lands on a tournament it eases in to a
+    // city-level view, so the camera is only zoomed out *in transit* and never
+    // while you're actually reading a stop.
+    function focusOn(n) {
+        const c = map.getCenter();
+        const miles = haversineMiles({ lat: c.lat, lng: c.lng }, n);
+        const offZoom = Math.abs(map.getZoom() - LOCAL_ZOOM) > 0.5;
+        if (!offZoom && miles < 60) {
+            map.panTo([n.lat, n.lng], { animate: true, duration: 0.5 });
+        } else {
+            map.flyTo([n.lat, n.lng], LOCAL_ZOOM, { duration: miles > 400 ? 1.5 : 0.8, easeLinearity: 0.3 });
+        }
+    }
+
+    function animateTravel(fromRi, toRi, durationMs, dwellMs) {
         if (window.journeyAnim) cancelAnimationFrame(window.journeyAnim);
         const a = route[fromRi];
         const b = route[toRi];
@@ -457,27 +699,27 @@
         setCompletedThrough(fromRi);
         activeLeg.setLatLngs([[a.lat, a.lng], [a.lat, a.lng]]);
 
+        const secs = durationMs / 1000;
         const dist = haversineMiles(a, b);
-        const flyDur = durationMs / 1000;
-        if (dist > 80) {
-            // Long hop (typically out of state): pull the camera back to frame
-            // BOTH endpoints so you actually watch the marker travel across
-            // instead of it flying off a zoomed-in view.
-            map.flyToBounds([[a.lat, a.lng], [b.lat, b.lng]], {
-                paddingTopLeft: [60, 80],
-                paddingBottomRight: [60, 60],
-                duration: flyDur,
-                easeLinearity: 0.2,
-                maxZoom: 9,
-            });
-            zoomedOutForHop = true;
-        } else if (zoomedOutForHop && map.getZoom() < 9) {
-            // Coming back to local events after a long trip — ease back in
-            // smoothly rather than panning at a far-out zoom.
-            map.flyTo([b.lat, b.lng], 10, { duration: flyDur, easeLinearity: 0.3 });
-            zoomedOutForHop = false;
-        } else {
-            map.panTo([b.lat, b.lng], { animate: true, duration: flyDur });
+        let wide = false;
+        if (dist >= 0.5) {
+            const bounds = L.latLngBounds([[a.lat, a.lng], [b.lat, b.lng]]);
+            // zoom level at which both ends fit in the current viewport (with padding)
+            const fitZoom = map.getBoundsZoom(bounds, false, L.point(120, 140));
+            wide = fitZoom < LOCAL_ZOOM - 0.5;
+            if (wide) {
+                map.flyToBounds(bounds, {
+                    paddingTopLeft: [60, 80], paddingBottomRight: [60, 60],
+                    duration: secs, easeLinearity: 0.25, maxZoom: LOCAL_ZOOM,
+                });
+            }
+        }
+        if (!wide) {
+            if (Math.abs(map.getZoom() - LOCAL_ZOOM) > 0.5) {
+                map.flyTo([b.lat, b.lng], LOCAL_ZOOM, { duration: secs, easeLinearity: 0.3 });
+            } else {
+                map.panTo([b.lat, b.lng], { animate: true, duration: secs });
+            }
         }
 
         // Lazy-init start on the FIRST frame, not at scheduling, so the marker
@@ -500,7 +742,11 @@
                 window.journeyAnim = null;
                 setCompletedThrough(toRi);
                 activeLeg.setLatLngs([]);
-                if (onDone) onDone();
+                // Landed after a wide shot on a tournament: zoom in for the dwell
+                if (wide && b.kind === 'stop') {
+                    const dur = Math.max(0.25, Math.min(0.7, (dwellMs || 500) / 1000 * 0.9));
+                    map.flyTo([b.lat, b.lng], LOCAL_ZOOM, { duration: dur, easeLinearity: 0.3 });
+                }
             }
         }
         window.journeyAnim = requestAnimationFrame(frame);
@@ -526,19 +772,19 @@
             const cycle = SPEED_MS[currentSpeed];
             const travelMs = cycle * TRAVEL_RATIO;
             onArrive(ri, false);
-            animateTravel(prev, ri, travelMs);
+            animateTravel(prev, ri, travelMs, opts.dwellMs);
         } else {
             if (window.journeyAnim) { cancelAnimationFrame(window.journeyAnim); window.journeyAnim = null; }
             const n = route[ri];
             playerMarker.setLatLng([n.lat, n.lng]);
             setCompletedThrough(ri);
             activeLeg.setLatLngs([]);
-            map.panTo([n.lat, n.lng], { animate: true, duration: 0.5 });
+            focusOn(n);
             onArrive(ri, true);
         }
     }
 
-    // Snap straight to a tournament (cluster click, venue pill, prev/next)
+    // Snap straight to a tournament (cluster click, venue pill, timeline, slider, prev/next)
     function jumpToStop(stopIdx) {
         pause();
         if (stopIdx < 0 || stopIdx >= data.length) return;
@@ -548,13 +794,13 @@
     function advance() {
         if (!isPlaying) return;
         if (routePos >= route.length - 1) { pause(); return; }
-        goToRoute(routePos + 1);
         const cycle = SPEED_MS[currentSpeed];
         const travelMs = cycle * TRAVEL_RATIO;
-        // Dwell depends on what we just arrived at: linger on events, brush past home
-        const arrived = route[routePos].kind;
+        // Dwell depends on what we're arriving at: linger on events, brush past home
+        const arrived = route[routePos + 1].kind;
         const dwell = arrived === 'home' ? cycle * HOME_DWELL_RATIO
                                          : cycle * (1 - TRAVEL_RATIO);
+        goToRoute(routePos + 1, { dwellMs: dwell });
         window.journeyTimer = setTimeout(advance, travelMs + dwell);
     }
 
@@ -580,6 +826,7 @@
     window.journeyGoTo = function(i) { jumpToStop(i); };
     window.journeySetSpeed = function(s, btn) {
         currentSpeed = s;
+        window.journeySpeed = s;
         document.querySelectorAll('[data-speed]').forEach(b => {
             b.classList.remove('btn-primary');
             b.classList.add('btn-outline-primary');
@@ -588,6 +835,20 @@
         btn.classList.add('btn-primary');
         if (isPlaying) { pause(); play(); }
     };
+
+    // Keyboard: Space = play/pause, Left/Right = previous/next tournament.
+    window.journeyKeyHandler = function(e) {
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
+        const t = e.target;
+        const tag = t && t.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;   // typing / native slider keys
+        if (e.key === ' ') {
+            if (tag === 'BUTTON' || tag === 'A') return;                         // let focused buttons handle Space
+            e.preventDefault(); window.journeyToggle();
+        } else if (e.key === 'ArrowRight') { e.preventDefault(); window.journeyNext(); }
+        else if (e.key === 'ArrowLeft') { e.preventDefault(); window.journeyPrev(); }
+    };
+    document.addEventListener('keydown', window.journeyKeyHandler);
 
     // Rebuild the whole route when the home base is set/cleared from the shell
     window.journeyApplyHome = function() {
@@ -605,6 +866,7 @@
     };
 
     // ─── Initialise ────────────────────────────────────────────
+    buildTimeline();
     buildRoute();
     redrawStatic();
     document.getElementById('info-total-miles').textContent = fmtMiles(routeCum[routeCum.length - 1]);
@@ -617,7 +879,7 @@
 
 {% else %}
 <div class="text-center text-muted py-5">
-    <p class="fs-5 mb-1">No mapped tournaments found for this player.</p>
+    <p class="fs-5 mb-1">No mapped tournaments found for this player{% if selected_year %} in {{ selected_year }}{% endif %}.</p>
     <small>Tournaments need to be geocoded (lat/lng) and not online to appear on the journey map.</small>
 </div>
 {% endif %}

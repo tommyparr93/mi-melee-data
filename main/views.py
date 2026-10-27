@@ -1628,9 +1628,74 @@ class AnalyticsPlayerSearchView(generic.TemplateView):
 # Player Journey Map
 # ---------------------------------------------------------------------------
 
+def _json_for_script(obj):
+    """JSON that is safe to drop inside <script type="application/json">:
+    '<', '>' and '&' are escaped so a name like "</script>" can't break out."""
+    return (json.dumps(obj, cls=DjangoJSONEncoder)
+            .replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026'))
+
+
+def _journey_pr_history(player):
+    """A player's PR seasons (oldest first) plus a summary for the PR tracker:
+    latest and best placement, how many seasons they were ranked, etc."""
+    import datetime
+    rows = list(PRSeasonResult.objects.filter(player_id=player.id).select_related('pr_season'))
+    if not rows:
+        return [], None
+    rows.sort(key=lambda r: (r.pr_season.start_date or datetime.date.min, r.pr_season_id))
+
+    seasons = []
+    for r in rows:
+        s = r.pr_season
+        rank = (r.rank or '').strip()
+        seasons.append({
+            'season_id': s.id,
+            'name': s.name,
+            'short': re.sub(r'\s*Power Rankings\s*', ' ', s.name).strip(),
+            'start': s.start_date.isoformat() if s.start_date else None,
+            'end': s.end_date.isoformat() if s.end_date else None,
+            'rank': rank,
+            'label': f'#{rank}' if rank.isdigit() else rank,
+            'tier': {'1': 'gold', '2': 'silver', '3': 'bronze'}.get(
+                rank, 'ranked' if rank.isdigit() else 'mention'),
+        })
+
+    numeric = [(int(x['rank']), i) for i, x in enumerate(seasons) if x['rank'].isdigit()]
+    best = None
+    if numeric:
+        best_rank = min(n for n, _ in numeric)
+        best = seasons[max(i for n, i in numeric if n == best_rank)]   # most recent if tied
+    latest = seasons[-1]
+    current_season = (PRSeason.objects
+                      .filter(is_active=False, region_code_id=MICHIGAN_REGION_CODE)
+                      .order_by(F('start_date').desc(nulls_last=True), '-id').first())
+    summary = {
+        'appearances': len(seasons),
+        'ranked_seasons': len(numeric),
+        'top3': sum(1 for n, _ in numeric if n <= 3),
+        'number_ones': sum(1 for n, _ in numeric if n == 1),
+        'best': best,
+        'latest': latest,
+        'latest_is_current': bool(current_season and latest['season_id'] == current_season.id),
+    }
+    return seasons, summary
+
+
 class JourneyView(generic.TemplateView):
-    """Shell page for the player journey map. No player pre-selected by default."""
+    """Shell page for the player journey map. Supports deep links:
+    /journey/?player=<id>&year=<yyyy> opens straight onto that journey."""
     template_name = 'main/player_journey.html'
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        player_id = _parse_int_param(self.request, 'player')
+        if player_id:
+            p = Player.objects.filter(id=player_id).only('id', 'name').first()
+            if p:
+                context['initial_player'] = p.id
+                context['initial_player_name'] = _clean_player_tag(p.name)
+                context['initial_year'] = _parse_int_param(self.request, 'year')
+        return context
 
 
 class JourneyDataView(generic.TemplateView):
@@ -1649,6 +1714,7 @@ class JourneyDataView(generic.TemplateView):
             return context
 
         context['player'] = player
+        context['player_display_name'] = _clean_player_tag(player.name)
 
         # Fetch all sets for the player + tournament data
         all_sets = list(Set.objects.filter(
@@ -1662,14 +1728,35 @@ class JourneyDataView(generic.TemplateView):
                 tourney_sets[s.tournament_id].append(s)
 
         # Fetch geocoded, non-online tournaments
-        tournaments = list(Tournament.objects.filter(
+        all_tournaments = list(Tournament.objects.filter(
             id__in=tourney_sets.keys(),
             lat__isnull=False,
             lng__isnull=False,
         ).exclude(online=True).order_by('date'))
 
+        # PR tracker (independent of the time frame being viewed)
+        pr_seasons, pr_summary = _journey_pr_history(player)
+        context['pr_summary'] = pr_summary
+        context['pr_seasons'] = pr_seasons
+        context['pr_data'] = _json_for_script(pr_seasons)
+
+        # Year selector: always built from the player's whole history, then the
+        # journey itself is narrowed to the chosen year (stats restart from zero).
+        year_counts = defaultdict(int)
+        for t in all_tournaments:
+            if t.date:
+                year_counts[t.date.year] += 1
+        context['years'] = [{'year': y, 'count': c} for y, c in sorted(year_counts.items())]
+        selected_year = _parse_int_param(self.request, 'year')
+        if selected_year not in year_counts:
+            selected_year = None          # unknown/blank year means "all time"
+        context['selected_year'] = selected_year
+        context['total_journey_count'] = len(all_tournaments)
+        tournaments = ([t for t in all_tournaments if t.date and t.date.year == selected_year]
+                       if selected_year else all_tournaments)
+
         if not tournaments:
-            context['journey_data'] = json.dumps([])
+            context['journey_data'] = _json_for_script([])
             context['journey_count'] = 0
             return context
 
@@ -1748,7 +1835,7 @@ class JourneyDataView(generic.TemplateView):
                 'slug': t.slug or '',
             })
 
-        context['journey_data'] = json.dumps(journey, cls=DjangoJSONEncoder)
+        context['journey_data'] = _json_for_script(journey)
         context['journey_count'] = len(journey)
         return context
 

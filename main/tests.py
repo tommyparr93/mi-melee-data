@@ -582,3 +582,155 @@ class SeasonPageContextTests(TestCase):
         resp = self.client.get(f'/pr_season/{empty.pk}')
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "haven't been published yet")
+
+
+from types import SimpleNamespace as _NS
+from main.views import _journey_pr_history, _json_for_script
+
+
+class JsonForScriptTests(SimpleTestCase):
+    def test_script_breakouts_are_escaped_but_still_valid_json(self):
+        import json as _json
+        out = _json_for_script({'name': '</script><b>&x'})
+        self.assertNotIn('<', out)
+        self.assertNotIn('>', out)
+        self.assertNotIn('&', out)
+        self.assertEqual(_json.loads(out)['name'], '</script><b>&x')
+
+
+class JourneyDataViewTests(TestCase):
+    """Year filter, year list, PR tracker and tournament placements for the
+    journey data partial."""
+
+    def setUp(self):
+        _Region.objects.create(id=7, name='Michigan')
+        self.me = Player.objects.create(name='Me (#7, SSBM Rank 2025)')
+        self.opp = Player.objects.create(name='Opp')
+        self.t = {}
+        for tid, date in ((1, _dt.date(2024, 3, 1)), (2, _dt.date(2025, 4, 1)), (3, _dt.date(2025, 9, 1))):
+            self.t[tid] = Tournament.objects.create(
+                id=tid, name=f'T{tid}', date=date, lat=42.0 + tid, lng=-83.0, online=False)
+            make_set(tid, self.me, self.opp, self.me, self.t[tid])
+        # a tournament without coordinates must never appear on the map
+        no_coords = Tournament.objects.create(id=9, name='NoCoords', date=_dt.date(2025, 5, 1))
+        make_set(9, self.me, self.opp, self.me, no_coords)
+
+    def _get(self, qs=''):
+        results = [_NS(tournament_id=1, placement=3), _NS(tournament_id=3, placement=1)]
+        with _mock.patch('main.views.TournamentResults') as tr:
+            tr.objects.filter.return_value = results
+            return self.client.get(f'/journey/data/?player={self.me.id}{qs}')
+
+    def test_all_time_and_year_list(self):
+        resp = self._get()
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['journey_count'], 3)
+        self.assertEqual(resp.context['years'], [{'year': 2024, 'count': 1}, {'year': 2025, 'count': 2}])
+        self.assertIsNone(resp.context['selected_year'])
+        self.assertEqual(resp.context['total_journey_count'], 3)
+
+    def test_year_filter_narrows_the_journey_but_not_the_year_list(self):
+        import json as _json
+        resp = self._get('&year=2025')
+        self.assertEqual(resp.context['selected_year'], 2025)
+        self.assertEqual(resp.context['journey_count'], 2)
+        self.assertEqual(resp.context['total_journey_count'], 3)
+        self.assertEqual(len(resp.context['years']), 2)           # selector still shows every year
+        payload = _json.loads(resp.context['journey_data'])
+        self.assertEqual([d['name'] for d in payload], ['T2', 'T3'])
+        self.assertTrue(all(d['date'].startswith('2025') for d in payload))
+
+    def test_unknown_year_falls_back_to_all_time(self):
+        resp = self._get('&year=1999')
+        self.assertIsNone(resp.context['selected_year'])
+        self.assertEqual(resp.context['journey_count'], 3)
+
+    def test_placement_is_in_the_payload_for_the_wins_card(self):
+        import json as _json
+        payload = _json.loads(self._get().context['journey_data'])
+        self.assertEqual({d['name']: d['placement'] for d in payload}, {'T1': 3, 'T2': None, 'T3': 1})
+
+    def test_display_name_drops_the_imported_annotation(self):
+        self.assertEqual(self._get().context['player_display_name'], 'Me')
+
+    def test_renders_year_pills_and_no_pr_tracker_without_pr_history(self):
+        resp = self._get('&year=2025')
+        self.assertContains(resp, 'jy-btn')
+        self.assertContains(resp, 'id="card-twins"')
+        self.assertNotContains(resp, 'Power Ranking Tracker')
+
+    def test_renders_pr_tracker_when_the_player_has_pr_history(self):
+        season = PRSeason.objects.create(
+            name='2025 Summer Power Rankings', start_date=_dt.date(2025, 4, 1),
+            end_date=_dt.date(2025, 9, 30), region_code_id=7)
+        PRSeasonResult.objects.create(pr_season=season, player=self.me, rank='2')
+        resp = self._get()
+        self.assertContains(resp, 'Power Ranking Tracker')
+        self.assertContains(resp, '2025 Summer')                  # " Power Rankings" trimmed for display
+        self.assertEqual(resp.context['pr_summary']['best']['label'], '#2')
+
+
+class JourneyPrHistoryTests(TestCase):
+    def setUp(self):
+        _Region.objects.create(id=7, name='Michigan')
+        self.p = Player.objects.create(name='P')
+        self.seasons = [
+            PRSeason.objects.create(name=n, start_date=s, end_date=e, region_code_id=7)
+            for n, s, e in (('S1 Power Rankings', _dt.date(2023, 1, 1), _dt.date(2023, 6, 30)),
+                            ('S2', _dt.date(2023, 7, 1), _dt.date(2023, 12, 31)),
+                            ('S3', _dt.date(2024, 1, 1), _dt.date(2024, 6, 30)),
+                            ('S4', _dt.date(2024, 7, 1), _dt.date(2024, 12, 31)))]
+
+    def _rank(self, season, rank):
+        PRSeasonResult.objects.create(pr_season=season, player=self.p, rank=rank)
+
+    def test_no_history(self):
+        self.assertEqual(_journey_pr_history(self.p), ([], None))
+
+    def test_ordered_oldest_first_with_labels_and_tiers(self):
+        self._rank(self.seasons[2], 'HM')
+        self._rank(self.seasons[0], '1')
+        self._rank(self.seasons[1], '5')
+        seasons, _ = _journey_pr_history(self.p)
+        self.assertEqual([s['short'] for s in seasons], ['S1', 'S2', 'S3'])
+        self.assertEqual([s['label'] for s in seasons], ['#1', '#5', 'HM'])
+        self.assertEqual([s['tier'] for s in seasons], ['gold', 'ranked', 'mention'])
+
+    def test_best_latest_and_counts(self):
+        self._rank(self.seasons[0], '4')
+        self._rank(self.seasons[1], '2')
+        self._rank(self.seasons[2], '2')
+        self._rank(self.seasons[3], 'IM')
+        _, summary = _journey_pr_history(self.p)
+        self.assertEqual(summary['best']['short'], 'S3')          # tie on #2 -> the more recent season
+        self.assertEqual(summary['latest']['label'], 'IM')
+        self.assertEqual((summary['appearances'], summary['ranked_seasons'], summary['top3']), (4, 3, 2))
+        self.assertEqual(summary['number_ones'], 0)
+
+    def test_mention_only_player_has_no_best(self):
+        self._rank(self.seasons[0], 'HM')
+        _, summary = _journey_pr_history(self.p)
+        self.assertIsNone(summary['best'])
+        self.assertEqual(summary['ranked_seasons'], 0)
+
+    def test_latest_is_current_only_for_the_newest_finished_michigan_season(self):
+        self._rank(self.seasons[3], '3')
+        self.assertTrue(_journey_pr_history(self.p)[1]['latest_is_current'])
+        PRSeason.objects.create(name='S5', start_date=_dt.date(2025, 1, 1),
+                                end_date=_dt.date(2025, 6, 30), region_code_id=7)
+        self.assertFalse(_journey_pr_history(self.p)[1]['latest_is_current'])
+
+
+class JourneyShellDeepLinkTests(TestCase):
+    def test_deep_link_exposes_player_name_and_year(self):
+        p = Player.objects.create(name='Link (#9, SSBM Rank 2024)')
+        resp = self.client.get(f'/journey/?player={p.id}&year=2025')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['initial_player'], p.id)
+        self.assertEqual(resp.context['initial_player_name'], 'Link')
+        self.assertEqual(resp.context['initial_year'], 2025)
+        self.assertContains(resp, f'loadJourney({p.id}, 2025)')
+
+    def test_plain_page_and_unknown_player_do_not_autoload(self):
+        self.assertNotIn('initial_player', self.client.get('/journey/').context)
+        self.assertNotIn('initial_player', self.client.get('/journey/?player=999999').context)
