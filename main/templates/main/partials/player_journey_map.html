@@ -207,9 +207,15 @@
         markerZoomAnimation: true,
     });
     window.journeyMap = map;
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    // OSM's tile policy requires a valid Referer. Django's default
+    // Referrer-Policy (same-origin) strips it on cross-origin requests, which
+    // gets every tile blocked with a 403. Send just our origin for tile
+    // requests only (no site-wide header change). Also use the non-subdomain
+    // tile host, which OSM now asks clients to use.
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
         maxZoom: 18,
+        referrerPolicy: 'origin',
     }).addTo(map);
 
     // Faint full-route line (follows the route — spokes from home when in home mode)
