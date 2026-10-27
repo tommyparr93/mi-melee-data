@@ -354,13 +354,14 @@ superuser_required = user_passes_test(lambda u: u.is_superuser)
 
 def _rank_sort_key(result):
     """Order PR results: numeric ranks first (by value, so 2 < 10), then
-    text ranks. Known text ranks get an explicit precedence (IM before HM);
-    any other text falls back to alphabetical after those.
+    text ranks. Known text ranks get an explicit precedence (HM before IM,
+    the order the published rankings list them); any other text falls back to
+    alphabetical after those.
     """
     raw = (result.rank or '').strip()
     if raw.isdigit():
         return (0, int(raw), '')
-    known = {'IM': 0, 'HM': 1}
+    known = {'HM': 0, 'IM': 1}
     return (1, known.get(raw.upper(), 99), raw.upper())
 
 
@@ -610,8 +611,9 @@ class PrSeasonDetailView(DetailView):
         context = super().get_context_data(**kwargs)
         pr_season = self.get_object()
         context['pr_season'] = pr_season
-        pr_members = PRSeasonResult.objects.filter(pr_season_id=pr_season.pk)
-        context['pr_members'] = pr_members
+        # Rank is a text column (it can hold HM/IM), so sort in Python:
+        # 1, 2 ... 10, then HM, then IM. No ordering here showed arbitrary order.
+        context['pr_members'] = _sorted_season_results(pr_season)
         return context
 
 

@@ -29,7 +29,7 @@ class _RankStub:
 
 class RankSortKeyTests(SimpleTestCase):
     """Locks the PR rank order: numbers ascending by value (not string),
-    then text ranks (IM before HM), then any other text alphabetically."""
+    then text ranks (HM before IM, as the published rankings list them), then any other text alphabetically."""
 
     def _sorted(self, ranks):
         return [r.rank for r in sorted((_RankStub(x) for x in ranks),
@@ -41,11 +41,11 @@ class RankSortKeyTests(SimpleTestCase):
 
     def test_text_ranks_come_after_numbers(self):
         self.assertEqual(self._sorted(['IM', '2', 'HM', '1', '10']),
-                         ['1', '2', '10', 'IM', 'HM'])
+                         ['1', '2', '10', 'HM', 'IM'])
 
     def test_unknown_text_after_known_alphabetical(self):
         self.assertEqual(self._sorted(['ZZ', 'HM', 'IM']),
-                         ['IM', 'HM', 'ZZ'])
+                         ['HM', 'IM', 'ZZ'])
 
     def test_blank_rank_does_not_crash(self):
         # empty/None ranks are treated as text, sorted last — must not raise
@@ -468,3 +468,18 @@ class SyncMiTournamentsTests(TestCase):
         enter.assert_not_called()
         self.assertIn('[DRY RUN] Would ingest', out)
         self.assertIn('Dry run complete: 1 tournaments would be added', out)
+
+
+class PublicPrSeasonPageOrderTests(TestCase):
+    """/pr_season/<id> is public and its results had no ordering at all. Rank
+    is a text column, so it must sort 1, 2 ... 10, then HM, then IM."""
+
+    def test_members_are_sorted_numerically_then_hm_then_im(self):
+        season = PRSeason.objects.create(name='Order Test')
+        for i, rank in enumerate(['IM', '10', 'HM', '2', '1', '11']):
+            PRSeasonResult.objects.create(
+                pr_season=season, player=Player.objects.create(name=f'P{i}'), rank=rank)
+        resp = self.client.get(f'/pr_season/{season.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([m.rank for m in resp.context['pr_members']],
+                         ['1', '2', '10', '11', 'HM', 'IM'])
