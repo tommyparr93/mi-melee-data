@@ -401,3 +401,70 @@ class SeasonAdminGatingTests(TestCase):
         admin = User.objects.create_superuser('admin2', 'a2@x.com', 'pw')
         self.client.force_login(admin)
         self.assertEqual(self.client.get('/seasons/').status_code, 200)
+
+
+import datetime as _dt
+
+
+class SyncMiTournamentsTests(TestCase):
+    """The daily cron job crashed every run with "'datetime.date' object has
+    no attribute 'timestamp'" (Tournament.date is a DateField). These lock in
+    the default-date path plus the new --dry-run."""
+
+    BASE = 'main.management.commands.sync_mi_tournaments'
+
+    def _api(self, nodes):
+        resp = _mock.Mock(status_code=200)
+        resp.json.return_value = {'data': {'tournaments': {
+            'pageInfo': {'totalPages': 1}, 'nodes': nodes}}}
+        return resp
+
+    def _node(self, event_id=777):
+        return {
+            'id': 1, 'name': 'Test Cup', 'slug': 'tournament/test-cup',
+            'startAt': 1700000000, 'isOnline': False,
+            'events': [{'id': event_id, 'name': 'Melee Singles',
+                        'slug': 'tournament/test-cup/event/melee-singles',
+                        'type': 1, 'numEntrants': 20, 'videogame': {'id': 1}}],
+        }
+
+    def _run(self, nodes, *args):
+        out = _StringIO()
+        enter = _mock.Mock()
+        with _mock.patch.dict(_os.environ, {'SMASHGG_TOKEN': 'x'}), \
+                _mock.patch('environ.Env.read_env'), \
+                _mock.patch(self.BASE + '.requests.post', return_value=self._api(nodes)), \
+                _mock.patch(self.BASE + '.time.sleep'), \
+                _mock.patch(self.BASE + '.enter_tournament', enter):
+            _call_command('sync_mi_tournaments', *args, stdout=out)
+        return out.getvalue(), enter
+
+    def test_default_after_date_uses_latest_tournament_without_crashing(self):
+        Tournament.objects.create(id=1, name='Old', date=_dt.date(2026, 6, 29))
+        out, _ = self._run([])
+        self.assertIn('Using date from latest DB tournament: 2026-06-28', out)
+        self.assertIn('Sync complete', out)
+
+    def test_undated_tournaments_are_ignored_for_the_default_date(self):
+        Tournament.objects.create(id=1, name='Undated')            # date NULL
+        Tournament.objects.create(id=2, name='Dated', date=_dt.date(2026, 6, 29))
+        out, _ = self._run([])
+        self.assertIn('2026-06-28', out)
+
+    def test_new_tournament_is_ingested_and_existing_one_skipped(self):
+        Tournament.objects.create(id=1, name='Old', date=_dt.date(2026, 6, 29))
+        out, enter = self._run([self._node(777)])
+        enter.assert_called_once()
+        self.assertEqual(enter.call_args[0][0],
+                         'https://start.gg/tournament/test-cup/event/melee-singles')
+        Tournament.objects.create(id=777, name='Test Cup', date=_dt.date(2026, 7, 1))
+        out2, enter2 = self._run([self._node(777)])
+        enter2.assert_not_called()
+        self.assertIn('Already in database', out2)
+
+    def test_dry_run_imports_nothing(self):
+        Tournament.objects.create(id=1, name='Old', date=_dt.date(2026, 6, 29))
+        out, enter = self._run([self._node(777)], '--dry-run')
+        enter.assert_not_called()
+        self.assertIn('[DRY RUN] Would ingest', out)
+        self.assertIn('Dry run complete: 1 tournaments would be added', out)

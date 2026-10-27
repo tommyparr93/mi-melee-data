@@ -16,8 +16,14 @@ class Command(BaseCommand):
             type=str,
             help='Start date in YYYY-MM-DD format (e.g., 2025-12-20). If not provided, defaults to the date of the most recent tournament in the DB.',
         )
+        parser.add_argument(
+            '--dry-run',
+            action='store_true',
+            help='List the tournaments that would be imported, without importing or writing anything.',
+        )
 
     def handle(self, *args, **options):
+        dry_run = options['dry_run']
         # 1. Setup Environment and Token
         env = environ.Env()
         environ.Env.read_env()
@@ -42,11 +48,16 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.ERROR('Invalid date format. Please use YYYY-MM-DD.'))
                 return
         else:
-            # Get the most recent tournament date from our DB
-            latest_tournament = Tournament.objects.order_by('-date').first()
+            # Get the most recent tournament date from our DB. Tournament.date is
+            # a DateField (a plain date, which has no .timestamp()), and Postgres
+            # sorts NULLs first on DESC, so skip undated rows explicitly.
+            latest_tournament = (Tournament.objects.exclude(date__isnull=True)
+                                 .order_by('-date').first())
             if latest_tournament:
-                # Go back a couple of days from the latest to catch overlaps
-                after_date = latest_tournament.date - datetime.timedelta(days=1)
+                # Go back a day from the latest to catch overlaps
+                after_date = datetime.datetime.combine(
+                    latest_tournament.date - datetime.timedelta(days=1),
+                    datetime.time.min)
                 after_timestamp = int(after_date.timestamp())
                 self.stdout.write(f"Using date from latest DB tournament: {after_date.strftime('%Y-%m-%d')} ({after_timestamp})")
             else:
@@ -203,7 +214,14 @@ class Command(BaseCommand):
 
             # Construct the clean URL using the slug provided by the API
             url = f"https://start.gg/{valid_event['slug']}"
-            
+
+            if dry_run:
+                new_ingest_count += 1
+                self.stdout.write(self.style.SUCCESS(
+                    f"[DRY RUN] Would ingest: '{t['name']}' (Event: {valid_event['name']}, "
+                    f"{event_entrants} entrants, {datetime.datetime.fromtimestamp(t['startAt']).strftime('%Y-%m-%d')})"))
+                continue
+
             self.stdout.write(self.style.SUCCESS(f"Ingesting NEW Tournament: '{t['name']}' (Event: {valid_event['name']})"))
             
             try:
@@ -224,4 +242,8 @@ class Command(BaseCommand):
             # Sleep to prevent hitting rate limits during heavy data fetching
             time.sleep(2)
 
-        self.stdout.write(self.style.SUCCESS(f"Sync complete! {new_ingest_count} new tournaments added to the database."))
+        if dry_run:
+            self.stdout.write(self.style.SUCCESS(
+                f"Dry run complete: {new_ingest_count} tournaments would be added. Nothing was written."))
+        else:
+            self.stdout.write(self.style.SUCCESS(f"Sync complete! {new_ingest_count} new tournaments added to the database."))
