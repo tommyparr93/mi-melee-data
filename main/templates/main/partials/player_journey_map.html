@@ -44,7 +44,7 @@
             <div class="journey-stat-card stat-pr" id="card-pr" hidden>
                 <div class="stat-bar"></div>
                 <div>
-                    <div class="stat-label">Best PR So Far</div>
+                    <div class="stat-label">Highest PR</div>
                     <div class="stat-value"><span id="info-best-pr">&ndash;</span></div>
                     <small class="stat-sub" id="info-best-pr-season"></small>
                 </div>
@@ -441,7 +441,7 @@
         updateBestPrCard(d);
     }
 
-    // "Best PR So Far": the best numbered ranking from PR seasons that had already
+    // "Highest PR": the best numbered ranking from PR seasons that had already
     // finished before this tournament (ties go to the most recent season).
     let shownBestRank = null;
     function bestPrBefore(iso) {
