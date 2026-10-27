@@ -277,3 +277,107 @@ class SeasonResultMutationTests(TestCase):
         resp = self.client.post(reverse('remove_pr_result', args=[self.r1.id]))
         self.assertEqual(resp.status_code, 302)
         self.assertTrue(PRSeasonResult.objects.filter(id=self.r1.id).exists())
+
+
+import csv as _csv
+import os as _os
+import tempfile as _tempfile
+from io import StringIO as _StringIO
+from unittest import mock as _mock
+from django.core.management import call_command as _call_command
+
+
+def _write_geo_csv(rows):
+    fd, path = _tempfile.mkstemp(suffix='.csv')
+    _os.close(fd)
+    with open(path, 'w', newline='', encoding='utf-8') as f:
+        w = _csv.DictWriter(f, fieldnames=[
+            'id', 'name', 'city', 'state', 'lat', 'lng',
+            'venue_name', 'venue_address', 'postal_code'])
+        w.writeheader()
+        for r in rows:
+            w.writerow(r)
+    return path
+
+
+class ImportGeocodesTests(TestCase):
+    """The import must only ever touch location columns, matched by id, so it
+    is safe to run against a database whose other data has moved on."""
+
+    def _run(self, rows, *args):
+        path = _write_geo_csv(rows)
+        self.addCleanup(_os.remove, path)
+        out = _StringIO()
+        _call_command('import_geocodes', path, *args, stdout=out)
+        return out.getvalue()
+
+    def _row(self, tid, **kw):
+        base = dict(id=tid, name='CSV NAME', city='CSV City', state='ZZ',
+                    lat=42.1, lng=-83.7, venue_name='Venue',
+                    venue_address='1 Main St', postal_code='48104')
+        base.update(kw)
+        return base
+
+    def test_only_location_columns_change(self):
+        Tournament.objects.create(id=1, name='Keep Me', city='Ann Arbor', state='MI')
+        Tournament.objects.create(id=2, name='Blank City')
+        self._run([self._row(1), self._row(2)])
+        t1, t2 = Tournament.objects.get(id=1), Tournament.objects.get(id=2)
+        self.assertEqual((t1.lat, t1.lng, t1.venue_name), (42.1, -83.7, 'Venue'))
+        self.assertEqual((t1.name, t1.city, t1.state), ('Keep Me', 'Ann Arbor', 'MI'))
+        # blank city/state are filled, but names are never touched
+        self.assertEqual((t2.city, t2.state, t2.name), ('CSV City', 'ZZ', 'Blank City'))
+
+    def test_existing_coordinates_kept_unless_forced(self):
+        Tournament.objects.create(id=3, name='T', lat=1.0, lng=2.0)
+        self._run([self._row(3, lat=9.0, lng=9.0)])
+        t = Tournament.objects.get(id=3)
+        self.assertEqual((t.lat, t.lng), (1.0, 2.0))
+        self._run([self._row(3, lat=9.0, lng=9.0)], '--force')
+        t.refresh_from_db()
+        self.assertEqual((t.lat, t.lng), (9.0, 9.0))
+
+    def test_unknown_ids_and_bad_rows_are_skipped(self):
+        Tournament.objects.create(id=4, name='T')
+        out = self._run([self._row(999), self._row(4, lat='abc')])
+        self.assertIn('id not in this database: 1', out)
+        self.assertIn('bad CSV rows: 1', out)
+        self.assertIsNone(Tournament.objects.get(id=4).lat)
+
+    def test_dry_run_writes_nothing(self):
+        Tournament.objects.create(id=6, name='T')
+        out = self._run([self._row(6)], '--dry-run')
+        self.assertIn('Would update 1', out)
+        self.assertIsNone(Tournament.objects.get(id=6).lat)
+
+
+class PullStartggLocationsSafetyTests(TestCase):
+    """Production city/state may be hand-corrected: the Start.gg pull must not
+    overwrite them unless explicitly asked."""
+
+    PAYLOAD = {'data': {'event': {'tournament': {
+        'lat': 42.0, 'lng': -83.0, 'venueName': 'V', 'venueAddress': 'A',
+        'postalCode': '48000', 'addrState': 'OH', 'city': 'Start.gg City'}}}}
+
+    def _run(self, *args):
+        resp = _mock.Mock(status_code=200)
+        resp.json.return_value = self.PAYLOAD
+        base = 'main.management.commands.pull_startgg_locations'
+        with _mock.patch.dict(_os.environ, {'SMASHGG_TOKEN': 'x'}), \
+                _mock.patch('environ.Env.read_env'), \
+                _mock.patch(base + '.requests.post', return_value=resp), \
+                _mock.patch(base + '.time.sleep'):
+            _call_command('pull_startgg_locations', *args, stdout=_StringIO())
+
+    def test_city_state_not_overwritten_by_default(self):
+        Tournament.objects.create(id=5, name='T', city='Hand Edited', state='MI')
+        self._run()
+        t = Tournament.objects.get(id=5)
+        self.assertEqual((t.city, t.state), ('Hand Edited', 'MI'))
+        self.assertEqual((t.lat, t.lng, t.venue_name), (42.0, -83.0, 'V'))
+
+    def test_overwrite_text_flag_replaces_them(self):
+        Tournament.objects.create(id=5, name='T', city='Hand Edited', state='MI')
+        self._run('--overwrite-text')
+        t = Tournament.objects.get(id=5)
+        self.assertEqual((t.city, t.state), ('Start.gg City', 'OH'))

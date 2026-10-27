@@ -38,6 +38,9 @@ class Command(BaseCommand):
                             help='Re-fetch tournaments that already have lat/lng')
         parser.add_argument('--limit', type=int, default=None,
                             help='Limit number of tournaments to process (for testing)')
+        parser.add_argument('--overwrite-text', action='store_true',
+                            help='Also replace existing city/state with Start.gg values '
+                                 '(default: only fill them when empty)')
         parser.add_argument('--delay', type=float, default=0.85,
                             help='Seconds between API requests (default 0.85 = ~70 req/min, '
                                  'safely under Start.gg 80 req/60s limit)')
@@ -46,6 +49,7 @@ class Command(BaseCommand):
         force = options['force']
         limit = options['limit']
         delay = options['delay']
+        overwrite_text = options['overwrite_text']
 
         env = environ.Env()
         environ.Env.read_env()
@@ -119,10 +123,12 @@ class Command(BaseCommand):
             lng = data.get('lng')
             update_fields = []
 
-            if data.get('addrState'):
+            # city/state may have been hand-corrected, so by default only fill
+            # them when empty. --overwrite-text restores the old always-replace.
+            if data.get('addrState') and (overwrite_text or not t.state):
                 t.state = data['addrState']
                 update_fields.append('state')
-            if data.get('city'):
+            if data.get('city') and (overwrite_text or not t.city):
                 t.city = data['city']
                 update_fields.append('city')
             if data.get('venueName'):
