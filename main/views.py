@@ -616,7 +616,25 @@ class PrSeasonDetailView(DetailView):
         results = _sorted_season_results(pr_season)
         context['pr_members'] = results
         context.update(_season_page_context(pr_season, results))
+        context['graphic'] = _season_graphic(self.request, pr_season)
         return context
+
+
+def _season_graphic(request, season):
+    """Display info for the season's custom graphic, or None. A missing/unreadable
+    file (e.g. media not restored on a new server) must fall back to the normal
+    hero rather than break the page."""
+    if not season.graphic:
+        return None
+    try:
+        return {
+            'url': season.graphic.url,
+            'absolute_url': request.build_absolute_uri(season.graphic.url),
+            'width': season.graphic.width,
+            'height': season.graphic.height,
+        }
+    except (OSError, ValueError):
+        return None
 
 
 class TournamentDetailView(DetailView):

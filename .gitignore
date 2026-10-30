@@ -16,3 +16,4 @@ main/migrations/__pycache__/
 .env.sandbox
 backups/
 GEMINI.md
+media/

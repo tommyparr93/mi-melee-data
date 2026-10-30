@@ -3,7 +3,15 @@
 {% block title %}{{ pr_season.name }} | MI Melee Power Rankings{% endblock %}
 
 {# This page is built to be responsive; opt in to real phone widths for just this page. #}
-{% block extra_head %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
+{% block extra_head %}<meta name="viewport" content="width=device-width, initial-scale=1">
+{% if graphic %}
+<meta property="og:title" content="{{ pr_season.name }} | MI Melee Power Rankings">
+<meta property="og:type" content="website">
+<meta property="og:image" content="{{ graphic.absolute_url }}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="{{ graphic.absolute_url }}">
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <style>
@@ -168,6 +176,39 @@
     .pr-links a:hover { background: #e7f0ff; }
     .pr-empty { text-align: center; color: #64748b; padding: 3rem 1rem; background: #fff; border: 1px dashed #cbd5e1; border-radius: 14px; margin-bottom: 1.5rem; }
 
+    /* season graphic hero */
+    .pr-graphic {
+        position: relative; margin: 1rem 0 0; border-radius: 16px; overflow: hidden;
+        background: #0f172a; box-shadow: 0 12px 32px -14px rgba(15,23,42,0.55);
+        cursor: zoom-in; display: block; width: 100%; padding: 0; border: 0;
+    }
+    .pr-graphic img { display: block; width: auto; max-width: 100%; height: auto; max-height: 82vh; margin: 0 auto; }
+    .pr-graphic-hint {
+        position: absolute; right: 0.8rem; bottom: 0.8rem; font-size: 0.72rem; font-weight: 700;
+        letter-spacing: 0.4px; color: #fff; background: rgba(15,23,42,0.72); border-radius: 999px;
+        padding: 0.3rem 0.8rem; pointer-events: none; opacity: 0.9;
+    }
+    .pr-graphic:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+    .pr-hero.pr-hero-compact { margin-top: 0.9rem; padding: 1.1rem 1.5rem 1.15rem; }
+    .pr-hero.pr-hero-compact h1 { font-size: 1.9rem; }
+    .pr-hero.pr-hero-compact .pr-chips { margin-top: 0.85rem; }
+
+    #pr-lightbox {
+        border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh;
+        width: 100vw; height: 100vh;
+    }
+    #pr-lightbox::backdrop { background: rgba(2,6,23,0.92); }
+    .pr-lb-scroll { width: 100%; height: 100%; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 3rem 1rem 1.5rem; box-sizing: border-box; }
+    .pr-lb-scroll img { display: block; max-width: min(96vw, 100%); max-height: calc(100vh - 4.5rem); width: auto; height: auto; margin: auto; cursor: zoom-in; }
+    .pr-lb-scroll.actual { align-items: flex-start; justify-content: flex-start; }
+    .pr-lb-scroll.actual img { max-width: none; max-height: none; cursor: zoom-out; margin: 0; }
+    .pr-lb-close {
+        position: fixed; top: 0.7rem; right: 0.9rem; z-index: 2; color: #fff; background: rgba(255,255,255,0.14);
+        border: 1px solid rgba(255,255,255,0.3); border-radius: 999px; font-weight: 700; font-size: 0.85rem; padding: 0.35rem 1rem; cursor: pointer;
+    }
+    .pr-lb-close:hover { background: rgba(255,255,255,0.25); }
+    .pr-lb-tip { position: fixed; top: 0.85rem; left: 1rem; color: #cbd5e1; font-size: 0.78rem; }
+
     @media (max-width: 860px) {
         .pr-podium { grid-template-columns: 1fr; }
         .pr-pod-1, .pr-pod-2, .pr-pod-3 { order: initial; }
@@ -182,8 +223,21 @@
     }
 </style>
 
+{% if graphic %}
+<!-- Season graphic hero -->
+<button type="button" class="pr-graphic" id="pr-graphic-btn" aria-label="Open the {{ pr_season.name }} graphic full size">
+    <img src="{{ graphic.url }}" width="{{ graphic.width }}" height="{{ graphic.height }}" alt="{{ pr_season.name }} Power Rankings graphic">
+    <span class="pr-graphic-hint">Click to enlarge</span>
+</button>
+<dialog id="pr-lightbox" aria-label="{{ pr_season.name }} graphic">
+    <span class="pr-lb-tip">Click the image to toggle full size &middot; Esc to close</span>
+    <button type="button" class="pr-lb-close" id="pr-lb-close">Close</button>
+    <div class="pr-lb-scroll" id="pr-lb-scroll"><img src="{{ graphic.url }}" alt="{{ pr_season.name }} Power Rankings graphic"></div>
+</dialog>
+{% endif %}
+
 <!-- Hero -->
-<div class="pr-hero">
+<div class="pr-hero{% if graphic %} pr-hero-compact{% endif %}">
     <div class="pr-hero-top">
         <div>
             <span class="pr-eyebrow">{% if pr_season.region_code %}{{ pr_season.region_code.name }} &middot; {% endif %}Melee Power Rankings</span>
@@ -300,5 +354,26 @@
     <a href="{% url 'analytics' %}">Rank movement &amp; analytics</a>
     <a href="{% url 'journey' %}">Player Journey</a>
 </div>
+{% endif %}
+
+{% if graphic %}
+<script>
+(function () {
+    var dlg = document.getElementById('pr-lightbox');
+    var scroll = document.getElementById('pr-lb-scroll');
+    if (!dlg || !dlg.showModal) { return; }   // very old browsers: the inline graphic still shows
+    document.getElementById('pr-graphic-btn').addEventListener('click', function () {
+        scroll.classList.remove('actual');
+        dlg.showModal();
+    });
+    document.getElementById('pr-lb-close').addEventListener('click', function () { dlg.close(); });
+    scroll.querySelector('img').addEventListener('click', function (e) {
+        e.stopPropagation();
+        scroll.classList.toggle('actual');
+    });
+    // clicking the dark area around the image closes it
+    scroll.addEventListener('click', function () { dlg.close(); });
+})();
+</script>
 {% endif %}
 {% endblock %}

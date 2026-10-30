@@ -6,7 +6,7 @@
         <button type="button" class="btn-close" onclick="document.getElementById('modal-container').innerHTML=''"></button>
       </div>
       <div class="modal-body">
-        <form hx-post="{% if form_action %}{{ form_action }}{% else %}{% url 'pr_season_create' %}{% endif %}" hx-target="#modal-container">
+        <form hx-post="{% if form_action %}{{ form_action }}{% else %}{% url 'pr_season_create' %}{% endif %}" hx-target="#modal-container" hx-encoding="multipart/form-data">
           {% csrf_token %}
           {{ form.as_p }}
           <button type="submit" class="btn btn-primary">Save</button>

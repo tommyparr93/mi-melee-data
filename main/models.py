@@ -184,6 +184,8 @@ class PRSeason(models.Model):
     is_active = models.BooleanField(default=False, null=False)
     region_code = models.ForeignKey(Region, models.DO_NOTHING, db_column='region_code', blank=True, null=True,
                                     related_name='seasons')
+    # The season's custom PR graphic. Any aspect ratio / format; shown as the page hero when set.
+    graphic = models.ImageField(upload_to='season_graphics/', blank=True, null=True)
 
     def __str__(self):
         return self.name

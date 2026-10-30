@@ -734,3 +734,104 @@ class JourneyShellDeepLinkTests(TestCase):
     def test_plain_page_and_unknown_player_do_not_autoload(self):
         self.assertNotIn('initial_player', self.client.get('/journey/').context)
         self.assertNotIn('initial_player', self.client.get('/journey/?player=999999').context)
+
+
+import io as _io
+import shutil as _shutil
+import tempfile as _tempfile
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import override_settings as _override
+
+
+def _png_bytes(size=(40, 20), fmt='PNG'):
+    from PIL import Image
+    buf = _io.BytesIO()
+    Image.new('RGB', size, (200, 30, 30)).save(buf, fmt)
+    return buf.getvalue()
+
+
+class SeasonGraphicTests(TestCase):
+    """Per-season custom graphic: upload via the admin season form, hero on the
+    public page, and a clean fallback to the normal hero when there is none."""
+
+    def setUp(self):
+        self._media = _tempfile.mkdtemp()
+        self._ov = _override(MEDIA_ROOT=self._media)
+        self._ov.enable()
+        self.addCleanup(self._ov.disable)
+        self.addCleanup(_shutil.rmtree, self._media, True)
+        _Region.objects.create(id=7, name='Michigan')
+        self.season = PRSeason.objects.create(
+            name='2026 Dawn', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 29), region_code_id=7)
+
+    def _form_data(self, **extra):
+        data = {'name': '2026 Dawn', 'start_date': '2026-01-01', 'end_date': '2026-06-29', 'region_code': 7}
+        data.update(extra)
+        return data
+
+    def _admin_post(self, upload):
+        admin = get_user_model().objects.create_superuser('gadmin', 'g@x.com', 'pw')
+        self.client.force_login(admin)
+        return self.client.post(f'/seasons/manage/{self.season.pk}/edit/', self._form_data(graphic=upload))
+
+    def test_page_without_graphic_uses_the_original_hero(self):
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.context['graphic'])
+        self.assertNotContains(resp, 'pr-graphic-btn')
+        self.assertNotContains(resp, 'class="pr-hero pr-hero-compact"')
+        self.assertNotContains(resp, 'og:image')
+
+    def test_page_with_graphic_shows_hero_and_share_preview(self):
+        self.season.graphic.save('dawn.png', SimpleUploadedFile('dawn.png', _png_bytes((300, 200))))
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertEqual((resp.context['graphic']['width'], resp.context['graphic']['height']), (300, 200))
+        self.assertContains(resp, 'pr-graphic-btn')
+        self.assertContains(resp, 'class="pr-hero pr-hero-compact"')
+        self.assertContains(resp, 'og:image')
+        self.assertTrue(resp.context['graphic']['absolute_url'].startswith('http'))
+
+    def test_missing_file_falls_back_instead_of_breaking_the_page(self):
+        PRSeason.objects.filter(pk=self.season.pk).update(graphic='season_graphics/gone.png')
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.context['graphic'])
+        self.assertNotContains(resp, 'pr-graphic-btn')
+
+    def test_superuser_can_upload_any_aspect_ratio(self):
+        tall = SimpleUploadedFile('tall.png', _png_bytes((100, 400)), content_type='image/png')
+        self.assertEqual(self._admin_post(tall).status_code, 302)
+        self.season.refresh_from_db()
+        self.assertTrue(self.season.graphic.name.startswith('season_graphics/'))
+        self.assertEqual((self.season.graphic.width, self.season.graphic.height), (100, 400))
+
+    def test_webp_is_accepted(self):
+        up = SimpleUploadedFile('w.webp', _png_bytes((50, 50), 'WEBP'), content_type='image/webp')
+        self.assertEqual(self._admin_post(up).status_code, 302)
+        self.season.refresh_from_db()
+        self.assertTrue(self.season.graphic)
+
+    def test_non_image_is_rejected(self):
+        up = SimpleUploadedFile('x.png', b'not an image at all', content_type='image/png')
+        resp = self._admin_post(up)
+        self.assertEqual(resp.status_code, 200)               # form re-rendered with errors
+        self.season.refresh_from_db()
+        self.assertFalse(self.season.graphic)
+
+    def test_oversize_image_is_rejected(self):
+        with _mock.patch('main.forms.MAX_GRAPHIC_BYTES', 10):
+            resp = self._admin_post(SimpleUploadedFile('big.png', _png_bytes((60, 60)), content_type='image/png'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'over 10 MB')
+        self.season.refresh_from_db()
+        self.assertFalse(self.season.graphic)
+
+    def test_editing_other_fields_keeps_the_existing_graphic(self):
+        self.season.graphic.save('keep.png', SimpleUploadedFile('keep.png', _png_bytes()))
+        kept = self.season.graphic.name
+        admin = get_user_model().objects.create_superuser('gadmin2', 'g2@x.com', 'pw')
+        self.client.force_login(admin)
+        resp = self.client.post(f'/seasons/manage/{self.season.pk}/edit/', self._form_data(name='Renamed'))
+        self.assertEqual(resp.status_code, 302)
+        self.season.refresh_from_db()
+        self.assertEqual((self.season.name, self.season.graphic.name), ('Renamed', kept))

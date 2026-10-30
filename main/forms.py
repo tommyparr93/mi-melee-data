@@ -28,17 +28,33 @@ class ConfirmMergeForm(forms.Form):
 
 #New PR season editor below this line
 
+MAX_GRAPHIC_BYTES = 10 * 1024 * 1024
+ALLOWED_GRAPHIC_FORMATS = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+
+
 class PRSeasonForm(forms.ModelForm):
     class Meta:
         model = PRSeason
-        fields = ['name', 'start_date', 'end_date', 'is_active', 'region_code']
+        fields = ['name', 'start_date', 'end_date', 'is_active', 'region_code', 'graphic']
         widgets = {
             'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'name': forms.TextInput(attrs={'class': 'form-control'}),
             'region_code': forms.Select(attrs={'class': 'form-select'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
+            'graphic': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
         }
+        help_texts = {'graphic': 'Optional season graphic (JPG, PNG, WebP or GIF, up to 10 MB). Any size or shape works.'}
+
+    def clean_graphic(self):
+        graphic = self.cleaned_data.get('graphic')
+        # An unchanged existing file comes back as a FieldFile with no .size check needed.
+        if graphic and hasattr(graphic, 'content_type'):
+            if graphic.size > MAX_GRAPHIC_BYTES:
+                raise forms.ValidationError('That image is over 10 MB; please upload a smaller one.')
+            if getattr(graphic.image, 'format', None) not in ALLOWED_GRAPHIC_FORMATS:
+                raise forms.ValidationError('Please upload a JPG, PNG, WebP or GIF image.')
+        return graphic
 
 class PRSeasonResultForm(forms.ModelForm):
     # We use a CharField for search, then clean it to find the Player object
