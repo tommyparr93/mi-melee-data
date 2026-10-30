@@ -1,5 +1,6 @@
 # Django model that represents the database
 from django.db import models
+from django.core.validators import FileExtensionValidator
 
 
 class AuthGroup(models.Model):
@@ -186,6 +187,10 @@ class PRSeason(models.Model):
                                     related_name='seasons')
     # The season's custom PR graphic. Any aspect ratio / format; shown as the page hero when set.
     graphic = models.ImageField(upload_to='season_graphics/', blank=True, null=True)
+    # Optional video version of the graphic (some seasons are announced as a video).
+    graphic_video = models.FileField(
+        upload_to='season_videos/', blank=True, null=True,
+        validators=[FileExtensionValidator(['mp4', 'm4v', 'webm'])])
 
     def __str__(self):
         return self.name

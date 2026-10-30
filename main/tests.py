@@ -836,3 +836,87 @@ class SeasonGraphicTests(TestCase):
         self.assertEqual(resp.status_code, 302)
         self.season.refresh_from_db()
         self.assertEqual((self.season.name, self.season.graphic.name), ('Renamed', kept))
+
+
+_MP4_BYTES = b'\x00\x00\x00\x18ftypmp42\x00\x00\x00\x00mp42isom' + b'\x00' * 64
+
+
+class SeasonVideoTests(TestCase):
+    """Seasons announced as a video: upload validation, the video player in
+    the stage, and fallbacks."""
+
+    def setUp(self):
+        self._media = _tempfile.mkdtemp()
+        self._ov = _override(MEDIA_ROOT=self._media)
+        self._ov.enable()
+        self.addCleanup(self._ov.disable)
+        self.addCleanup(_shutil.rmtree, self._media, True)
+        _Region.objects.create(id=7, name='Michigan')
+        self.season = PRSeason.objects.create(
+            name='2024 Summer', start_date=_dt.date(2024, 4, 14), end_date=_dt.date(2024, 10, 26), region_code_id=7)
+
+    def _attach_video(self):
+        self.season.graphic_video.save('s.mp4', SimpleUploadedFile('s.mp4', _MP4_BYTES))
+
+    def _admin_post(self, video):
+        admin = get_user_model().objects.create_superuser('vadmin', 'v@x.com', 'pw')
+        self.client.force_login(admin)
+        return self.client.post(f'/seasons/manage/{self.season.pk}/edit/', {
+            'name': '2024 Summer', 'start_date': '2024-04-14', 'end_date': '2024-10-26',
+            'region_code': 7, 'graphic_video': video})
+
+    def test_video_only_season_shows_the_player_without_lightbox_or_preview_image(self):
+        self._attach_video()
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertTrue(resp.context['graphic']['video_url'])
+        self.assertContains(resp, 'id="pr-video"')
+        self.assertContains(resp, 'type="video/mp4"')
+        self.assertContains(resp, '>Video</button>')
+        self.assertNotContains(resp, 'id="pr-lightbox"')
+        self.assertNotContains(resp, 'og:image')
+        self.assertNotContains(resp, 'poster=')
+
+    def test_video_with_image_uses_the_image_as_poster_and_share_preview(self):
+        self._attach_video()
+        self.season.graphic.save('p.png', SimpleUploadedFile('p.png', _png_bytes((80, 60))))
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertContains(resp, 'poster=')
+        self.assertContains(resp, 'og:image')
+
+    def test_missing_video_file_falls_back_to_the_normal_page(self):
+        PRSeason.objects.filter(pk=self.season.pk).update(graphic_video='season_videos/gone.mp4')
+        resp = self.client.get(f'/pr_season/{self.season.pk}')
+        self.assertEqual(resp.status_code, 200)
+        self.assertIsNone(resp.context['graphic'])
+        self.assertNotContains(resp, 'id="pr-video"')
+
+    def test_superuser_can_upload_an_mp4(self):
+        up = SimpleUploadedFile('clip.mp4', _MP4_BYTES, content_type='video/mp4')
+        self.assertEqual(self._admin_post(up).status_code, 302)
+        self.season.refresh_from_db()
+        self.assertTrue(self.season.graphic_video.name.startswith('season_videos/'))
+
+    def test_webm_header_is_accepted(self):
+        up = SimpleUploadedFile('clip.webm', b'\x1a\x45\xdf\xa3' + b'\x00' * 40, content_type='video/webm')
+        self.assertEqual(self._admin_post(up).status_code, 302)
+
+    def test_non_video_is_rejected(self):
+        up = SimpleUploadedFile('clip.mp4', b'this is definitely not a video file', content_type='video/mp4')
+        resp = self._admin_post(up)
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'MP4 or WebM')
+        self.season.refresh_from_db()
+        self.assertFalse(self.season.graphic_video)
+
+    def test_wrong_extension_is_rejected(self):
+        up = SimpleUploadedFile('clip.exe', _MP4_BYTES, content_type='video/mp4')
+        resp = self._admin_post(up)
+        self.assertEqual(resp.status_code, 200)
+        self.season.refresh_from_db()
+        self.assertFalse(self.season.graphic_video)
+
+    def test_oversize_video_is_rejected(self):
+        with _mock.patch('main.forms.MAX_VIDEO_BYTES', 10):
+            resp = self._admin_post(SimpleUploadedFile('clip.mp4', _MP4_BYTES, content_type='video/mp4'))
+        self.assertEqual(resp.status_code, 200)
+        self.assertContains(resp, 'over 150 MB')

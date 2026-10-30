@@ -30,12 +30,13 @@ class ConfirmMergeForm(forms.Form):
 
 MAX_GRAPHIC_BYTES = 10 * 1024 * 1024
 ALLOWED_GRAPHIC_FORMATS = {'JPEG', 'PNG', 'WEBP', 'GIF'}
+MAX_VIDEO_BYTES = 150 * 1024 * 1024
 
 
 class PRSeasonForm(forms.ModelForm):
     class Meta:
         model = PRSeason
-        fields = ['name', 'start_date', 'end_date', 'is_active', 'region_code', 'graphic']
+        fields = ['name', 'start_date', 'end_date', 'is_active', 'region_code', 'graphic', 'graphic_video']
         widgets = {
             'start_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
             'end_date': forms.DateInput(attrs={'type': 'date', 'class': 'form-control'}),
@@ -43,8 +44,12 @@ class PRSeasonForm(forms.ModelForm):
             'region_code': forms.Select(attrs={'class': 'form-select'}),
             'is_active': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'graphic': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'image/*'}),
+            'graphic_video': forms.ClearableFileInput(attrs={'class': 'form-control', 'accept': 'video/mp4,video/webm'}),
         }
-        help_texts = {'graphic': 'Optional season graphic (JPG, PNG, WebP or GIF, up to 10 MB). Any size or shape works.'}
+        help_texts = {
+            'graphic': 'Optional season graphic (JPG, PNG, WebP or GIF, up to 10 MB). Any size or shape works.',
+            'graphic_video': 'Optional video version (MP4 or WebM, up to 150 MB). If both are added, the video plays with the image as its poster.',
+        }
 
     def clean_graphic(self):
         graphic = self.cleaned_data.get('graphic')
@@ -55,6 +60,19 @@ class PRSeasonForm(forms.ModelForm):
             if getattr(graphic.image, 'format', None) not in ALLOWED_GRAPHIC_FORMATS:
                 raise forms.ValidationError('Please upload a JPG, PNG, WebP or GIF image.')
         return graphic
+
+    def clean_graphic_video(self):
+        video = self.cleaned_data.get('graphic_video')
+        if video and hasattr(video, 'content_type'):      # a new upload, not the stored file
+            if video.size > MAX_VIDEO_BYTES:
+                raise forms.ValidationError('That video is over 150 MB; please compress it and upload again.')
+            head = video.read(16)
+            video.seek(0)
+            is_mp4 = head[4:8] == b'ftyp'
+            is_webm = head[:4] == b'\x1a\x45\xdf\xa3'
+            if not (is_mp4 or is_webm):
+                raise forms.ValidationError('Please upload an MP4 or WebM video.')
+        return video
 
 class PRSeasonResultForm(forms.ModelForm):
     # We use a CharField for search, then clean it to find the Player object

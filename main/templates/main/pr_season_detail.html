@@ -7,9 +7,11 @@
 {% if graphic %}
 <meta property="og:title" content="{{ pr_season.name }} | MI Melee Power Rankings">
 <meta property="og:type" content="website">
+{% if graphic.absolute_url %}
 <meta property="og:image" content="{{ graphic.absolute_url }}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="{{ graphic.absolute_url }}">
+{% endif %}
 {% endif %}
 {% endblock %}
 
@@ -222,6 +224,12 @@
     }
     .pr-graphic:hover .pr-graphic-hint, .pr-graphic:focus-visible .pr-graphic-hint { opacity: 1; }
     .pr-graphic:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+    .pr-video-wrap {
+        position: relative; z-index: 1; margin: 0 auto; width: fit-content; max-width: 100%;
+        border-radius: 10px; overflow: hidden; background: #000;
+        box-shadow: 0 20px 50px -12px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.08);
+    }
+    .pr-video-wrap video { display: block; width: auto; max-width: 100%; height: calc(100vh - 11rem); min-height: 240px; background: #000; }
     .pr-stage-foot { text-align: center; color: #64748b; font-size: 0.82rem; margin: 0.7rem 0 1.5rem; }
     .pr-stage-foot a { font-weight: 600; text-decoration: none; }
     @media (hover: none) { .pr-graphic-hint { opacity: 0.9; } }
@@ -233,6 +241,7 @@
         .pr-select-sm { flex: 1 1 100%; }
         .pr-stage { padding: 0.55rem; border-radius: 14px; }
         .pr-graphic img { max-height: none; min-height: 0; }
+        .pr-video-wrap video { height: auto; min-height: 0; width: 100%; }
     }
 
     #pr-lightbox {
@@ -275,7 +284,7 @@
     </div>
     <div class="pr-bt-controls">
         <div class="pr-toggle" role="tablist" aria-label="Season view">
-            <button type="button" role="tab" id="tab-graphic" class="pr-tab active" aria-selected="true" aria-controls="pr-view-graphic" data-view="graphic">Graphic</button>
+            <button type="button" role="tab" id="tab-graphic" class="pr-tab active" aria-selected="true" aria-controls="pr-view-graphic" data-view="graphic">{% if graphic.video_url %}Video{% else %}Graphic{% endif %}</button>
             <button type="button" role="tab" id="tab-stats" class="pr-tab" aria-selected="false" aria-controls="pr-view-stats" data-view="stats">Rankings &amp; stats</button>
         </div>
         {% if season_nav|length > 1 %}
@@ -289,19 +298,30 @@
 </div>
 
 <section id="pr-view-graphic" role="tabpanel" aria-labelledby="tab-graphic">
-    <div class="pr-stage" style="--stage-img: url('{{ graphic.url }}');">
+    <div class="pr-stage"{% if graphic.url %} style="--stage-img: url('{{ graphic.url }}');"{% endif %}>
+        {% if graphic.video_url %}
+        <div class="pr-video-wrap">
+            <video id="pr-video" controls playsinline preload="metadata"{% if graphic.url %} poster="{{ graphic.url }}"{% endif %}>
+                <source src="{{ graphic.video_url }}" type="{{ graphic.video_type }}">
+                Your browser can't play this video. <a href="{{ graphic.video_url }}">Download it</a>.
+            </video>
+        </div>
+        {% else %}
         <button type="button" class="pr-graphic" id="pr-graphic-btn" aria-label="Open the {{ pr_season.name }} graphic full size">
             <img src="{{ graphic.url }}" width="{{ graphic.width }}" height="{{ graphic.height }}" alt="{{ pr_season.name }} Power Rankings graphic">
             <span class="pr-graphic-hint">Click to enlarge</span>
         </button>
+        {% endif %}
     </div>
-    <p class="pr-stage-foot">Tap the graphic to zoom &middot; <a href="#rankings" data-view-link="stats">See the full rankings &amp; stats &rarr;</a></p>
+    <p class="pr-stage-foot">{% if graphic.video_url %}Use the player&rsquo;s full-screen button for a bigger view{% else %}Tap the graphic to zoom{% endif %} &middot; <a href="#rankings" data-view-link="stats">See the full rankings &amp; stats &rarr;</a></p>
 </section>
+{% if not graphic.video_url %}
 <dialog id="pr-lightbox" aria-label="{{ pr_season.name }} graphic">
     <span class="pr-lb-tip">Click the image to toggle full size &middot; Esc to close</span>
     <button type="button" class="pr-lb-close" id="pr-lb-close">Close</button>
     <div class="pr-lb-scroll" id="pr-lb-scroll"><img src="{{ graphic.url }}" alt="{{ pr_season.name }} Power Rankings graphic"></div>
 </dialog>
+{% endif %}
 
 <section id="pr-view-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
 {% else %}
@@ -438,6 +458,10 @@
     function show(view, push) {
         if (!views[view]) { view = 'graphic'; }
         Object.keys(views).forEach(function (k) { views[k].hidden = (k !== view); });
+        if (view !== 'graphic') {
+            var vid = document.getElementById('pr-video');
+            if (vid) { vid.pause(); }
+        }
         tabs.forEach(function (t) {
             var on = t.dataset.view === view;
             t.classList.toggle('active', on);
@@ -463,7 +487,7 @@
     // ---- lightbox ----
     var dlg = document.getElementById('pr-lightbox');
     var scroll = document.getElementById('pr-lb-scroll');
-    if (!dlg || !dlg.showModal) { return; }   // very old browsers: the inline graphic still shows
+    if (!dlg || !scroll || !dlg.showModal) { return; }   // video seasons / very old browsers: no lightbox
     document.getElementById('pr-graphic-btn').addEventListener('click', function () {
         scroll.classList.remove('actual');
         dlg.showModal();

@@ -621,20 +621,40 @@ class PrSeasonDetailView(DetailView):
 
 
 def _season_graphic(request, season):
-    """Display info for the season's custom graphic, or None. A missing/unreadable
-    file (e.g. media not restored on a new server) must fall back to the normal
-    hero rather than break the page."""
-    if not season.graphic:
+    """Display info for the season's custom graphic (image and/or video), or None.
+    A missing/unreadable file (e.g. media not restored on a new server) must fall
+    back to the normal hero rather than break the page."""
+    image = None
+    if season.graphic:
+        try:
+            image = {
+                'url': season.graphic.url,
+                'absolute_url': request.build_absolute_uri(season.graphic.url),
+                'width': season.graphic.width,
+                'height': season.graphic.height,
+            }
+        except (OSError, ValueError):
+            image = None
+
+    video_url = video_type = None
+    if season.graphic_video:
+        try:
+            if season.graphic_video.storage.exists(season.graphic_video.name):
+                video_url = season.graphic_video.url
+                video_type = 'video/webm' if video_url.lower().endswith('.webm') else 'video/mp4'
+        except (OSError, ValueError):
+            video_url = None
+
+    if not image and not video_url:
         return None
-    try:
-        return {
-            'url': season.graphic.url,
-            'absolute_url': request.build_absolute_uri(season.graphic.url),
-            'width': season.graphic.width,
-            'height': season.graphic.height,
-        }
-    except (OSError, ValueError):
-        return None
+    return {
+        'url': image['url'] if image else None,
+        'absolute_url': image['absolute_url'] if image else None,
+        'width': image['width'] if image else None,
+        'height': image['height'] if image else None,
+        'video_url': video_url,
+        'video_type': video_type,
+    }
 
 
 class TournamentDetailView(DetailView):
