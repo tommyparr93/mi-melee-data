@@ -176,19 +176,68 @@
     .pr-links a:hover { background: #e7f0ff; }
     .pr-empty { text-align: center; color: #64748b; padding: 3rem 1rem; background: #fff; border: 1px dashed #cbd5e1; border-radius: 14px; margin-bottom: 1.5rem; }
 
-    /* season graphic hero */
+    /* season graphic: toolbar, toggle and stage */
+    .pr-bar-top {
+        display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem 1.25rem;
+        margin: 1rem 0 0.9rem; padding: 0.7rem 1.1rem; color: #fff; border-radius: 14px;
+        background: linear-gradient(135deg, #1e293b 0%, #0f172a 80%); box-shadow: 0 8px 22px -14px rgba(15,23,42,0.6);
+    }
+    .pr-bt-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.8rem; min-width: 0; }
+    .pr-bt-eyebrow { flex-basis: 100%; font-size: 0.64rem; font-weight: 700; text-transform: uppercase; letter-spacing: 1.1px; color: #93c5fd; }
+    .pr-bar-top h1 { margin: 0; font-size: 1.5rem; font-weight: 800; letter-spacing: -0.5px; line-height: 1.15; color: #fff; }
+    .pr-bt-dates { color: #cbd5e1; font-size: 0.85rem; }
+    .pr-bt-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+    .pr-select-sm { width: auto; min-width: 150px; padding: 0.4rem 0.8rem; font-size: 0.88rem; }
+    .pr-toggle { display: inline-flex; padding: 3px; border-radius: 999px; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18); }
+    .pr-tab {
+        border: 0; background: transparent; color: #cbd5e1; font-weight: 700; font-size: 0.86rem;
+        padding: 0.4rem 1.05rem; border-radius: 999px; cursor: pointer; transition: background 0.15s ease, color 0.15s ease;
+    }
+    .pr-tab:hover { color: #fff; }
+    .pr-tab.active { background: #fff; color: #0f172a; box-shadow: 0 2px 8px -2px rgba(0,0,0,0.4); }
+    .pr-tab:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
+    .pr-chips-plain { margin-top: 0; margin-bottom: 1.1rem; }
+    .pr-chips-plain .pr-chip { background: #fff; border-color: #e5e7eb; box-shadow: 0 4px 14px -10px rgba(15,23,42,0.35); }
+    .pr-chips-plain .pr-chip b { color: #0f172a; }
+    .pr-chips-plain .pr-vs { color: #64748b; }
+
+    .pr-stage {
+        position: relative; overflow: hidden; border-radius: 18px; padding: 1.1rem; background-color: #0b1220;
+        box-shadow: 0 18px 44px -18px rgba(15,23,42,0.7);
+    }
+    /* ambient glow: a blurred, enlarged copy of the graphic behind it */
+    .pr-stage::before {
+        content: ''; position: absolute; inset: -40px; background-image: var(--stage-img);
+        background-size: cover; background-position: center; filter: blur(46px) saturate(1.3); opacity: 0.55;
+    }
+    .pr-stage::after { content: ''; position: absolute; inset: 0; background: radial-gradient(ellipse at center, transparent 40%, rgba(2,6,23,0.55) 100%); pointer-events: none; }
     .pr-graphic {
-        position: relative; margin: 0 0 1.5rem; border-radius: 16px; overflow: hidden;
-        background: #0f172a; box-shadow: 0 12px 32px -14px rgba(15,23,42,0.55);
-        cursor: zoom-in; display: block; width: 100%; padding: 0; border: 0;
+        position: relative; z-index: 1; display: block; margin: 0 auto; padding: 0; border: 0; background: none;
+        cursor: zoom-in; width: fit-content; max-width: 100%; border-radius: 10px; overflow: hidden;
+        box-shadow: 0 20px 50px -12px rgba(0,0,0,0.75), 0 0 0 1px rgba(255,255,255,0.08);
+        transition: transform 0.2s ease;
     }
-    .pr-graphic img { display: block; width: auto; max-width: 100%; height: auto; max-height: 82vh; margin: 0 auto; }
+    .pr-graphic:hover { transform: scale(1.005); }
+    .pr-graphic img { display: block; width: auto; max-width: 100%; height: auto; max-height: calc(100vh - 11rem); min-height: 280px; object-fit: contain; }
     .pr-graphic-hint {
-        position: absolute; right: 0.8rem; bottom: 0.8rem; font-size: 0.72rem; font-weight: 700;
-        letter-spacing: 0.4px; color: #fff; background: rgba(15,23,42,0.72); border-radius: 999px;
-        padding: 0.3rem 0.8rem; pointer-events: none; opacity: 0.9;
+        position: absolute; right: 0.7rem; bottom: 0.7rem; font-size: 0.72rem; font-weight: 700;
+        letter-spacing: 0.4px; color: #fff; background: rgba(15,23,42,0.75); border-radius: 999px;
+        padding: 0.3rem 0.8rem; pointer-events: none; opacity: 0; transition: opacity 0.15s ease;
     }
+    .pr-graphic:hover .pr-graphic-hint, .pr-graphic:focus-visible .pr-graphic-hint { opacity: 1; }
     .pr-graphic:focus-visible { outline: 3px solid #60a5fa; outline-offset: 3px; }
+    .pr-stage-foot { text-align: center; color: #64748b; font-size: 0.82rem; margin: 0.7rem 0 1.5rem; }
+    .pr-stage-foot a { font-weight: 600; text-decoration: none; }
+    @media (hover: none) { .pr-graphic-hint { opacity: 0.9; } }
+    @media (max-width: 640px) {
+        .pr-bar-top { padding: 0.7rem 0.85rem; }
+        .pr-bt-controls { width: 100%; }
+        .pr-toggle { flex: 1 1 100%; }
+        .pr-tab { flex: 1; padding: 0.5rem 0.6rem; }
+        .pr-select-sm { flex: 1 1 100%; }
+        .pr-stage { padding: 0.55rem; border-radius: 14px; }
+        .pr-graphic img { max-height: none; min-height: 0; }
+    }
 
     #pr-lightbox {
         border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh;
@@ -220,6 +269,54 @@
     }
 </style>
 
+{% if graphic %}
+<!-- Season with a graphic: slim toolbar + Graphic / Rankings toggle -->
+<div class="pr-bar-top">
+    <div class="pr-bt-title">
+        <span class="pr-bt-eyebrow">{% if pr_season.region_code %}{{ pr_season.region_code.name }} &middot; {% endif %}Melee Power Rankings</span>
+        <h1>{{ pr_season.name }}{% if pr_season.is_active %}<span class="pr-live">In progress</span>{% endif %}</h1>
+        <span class="pr-bt-dates">{{ pr_season.start_date|date:"M j, Y" }} &ndash; {{ pr_season.end_date|date:"M j, Y" }}</span>
+    </div>
+    <div class="pr-bt-controls">
+        <div class="pr-toggle" role="tablist" aria-label="Season view">
+            <button type="button" role="tab" id="tab-graphic" class="pr-tab active" aria-selected="true" aria-controls="pr-view-graphic" data-view="graphic">Graphic</button>
+            <button type="button" role="tab" id="tab-stats" class="pr-tab" aria-selected="false" aria-controls="pr-view-stats" data-view="stats">Rankings &amp; stats</button>
+        </div>
+        {% if season_nav|length > 1 %}
+        <select id="pr-season-select" class="pr-select pr-select-sm" aria-label="Season" onchange="if (this.value) { window.location.href = this.value + window.location.hash; }">
+            {% for s in season_nav %}
+            <option value="{% url 'pr_season_details' s.id %}" {% if s.id == pr_season.id %}selected{% endif %}>{{ s.name }}</option>
+            {% endfor %}
+        </select>
+        {% endif %}
+    </div>
+</div>
+
+<section id="pr-view-graphic" role="tabpanel" aria-labelledby="tab-graphic">
+    <div class="pr-stage" style="--stage-img: url('{{ graphic.url }}');">
+        <button type="button" class="pr-graphic" id="pr-graphic-btn" aria-label="Open the {{ pr_season.name }} graphic full size">
+            <img src="{{ graphic.url }}" width="{{ graphic.width }}" height="{{ graphic.height }}" alt="{{ pr_season.name }} Power Rankings graphic">
+            <span class="pr-graphic-hint">Click to enlarge</span>
+        </button>
+    </div>
+    <p class="pr-stage-foot">Tap the graphic to zoom &middot; <a href="#rankings" data-view-link="stats">See the full rankings &amp; stats &rarr;</a></p>
+</section>
+<dialog id="pr-lightbox" aria-label="{{ pr_season.name }} graphic">
+    <span class="pr-lb-tip">Click the image to toggle full size &middot; Esc to close</span>
+    <button type="button" class="pr-lb-close" id="pr-lb-close">Close</button>
+    <div class="pr-lb-scroll" id="pr-lb-scroll"><img src="{{ graphic.url }}" alt="{{ pr_season.name }} Power Rankings graphic"></div>
+</dialog>
+
+<section id="pr-view-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+    {% if has_results %}
+    <div class="pr-chips pr-chips-plain">
+        <div class="pr-chip"><b>{{ ranked_count }}</b><span>Ranked</span></div>
+        {% if honorable %}<div class="pr-chip"><b>{{ honorable|length }}</b><span>Honorable mentions</span></div>{% endif %}
+        {% if inactive %}<div class="pr-chip"><b>{{ inactive|length }}</b><span>Inactive mentions</span></div>{% endif %}
+        {% if prev_season %}<span class="pr-vs">Movement shown vs. {{ prev_season.name }}</span>{% endif %}
+    </div>
+    {% endif %}
+{% else %}
 <!-- Hero -->
 <div class="pr-hero">
     <div class="pr-hero-top">
@@ -251,18 +348,6 @@
     </div>
     {% endif %}
 </div>
-
-{% if graphic %}
-<!-- Season graphic -->
-<button type="button" class="pr-graphic" id="pr-graphic-btn" aria-label="Open the {{ pr_season.name }} graphic full size">
-    <img src="{{ graphic.url }}" width="{{ graphic.width }}" height="{{ graphic.height }}" alt="{{ pr_season.name }} Power Rankings graphic">
-    <span class="pr-graphic-hint">Click to enlarge</span>
-</button>
-<dialog id="pr-lightbox" aria-label="{{ pr_season.name }} graphic">
-    <span class="pr-lb-tip">Click the image to toggle full size &middot; Esc to close</span>
-    <button type="button" class="pr-lb-close" id="pr-lb-close">Close</button>
-    <div class="pr-lb-scroll" id="pr-lb-scroll"><img src="{{ graphic.url }}" alt="{{ pr_season.name }} Power Rankings graphic"></div>
-</dialog>
 {% endif %}
 
 {% if not has_results %}
@@ -352,10 +437,40 @@
     <a href="{% url 'journey' %}">Player Journey</a>
 </div>
 {% endif %}
+{% if graphic %}</section>{% endif %}
 
 {% if graphic %}
 <script>
 (function () {
+    var tabs = document.querySelectorAll('.pr-tab');
+    var views = {graphic: document.getElementById('pr-view-graphic'), stats: document.getElementById('pr-view-stats')};
+
+    function show(view, push) {
+        if (!views[view]) { view = 'graphic'; }
+        Object.keys(views).forEach(function (k) { views[k].hidden = (k !== view); });
+        tabs.forEach(function (t) {
+            var on = t.dataset.view === view;
+            t.classList.toggle('active', on);
+            t.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        if (push) {
+            try { history.replaceState(null, '', view === 'stats' ? '#rankings' : location.pathname + location.search); } catch (e) {}
+            window.scrollTo({top: 0});
+        }
+    }
+    tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.dataset.view, true); }); });
+    document.querySelectorAll('[data-view-link]').forEach(function (a) {
+        a.addEventListener('click', function (e) { e.preventDefault(); show(a.dataset.viewLink, true); });
+    });
+    // left/right arrows switch tabs when a tab has focus
+    document.querySelector('.pr-toggle').addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') { return; }
+        var next = document.querySelector('.pr-tab:not(.active)');
+        show(next.dataset.view, true); next.focus();
+    });
+    show(location.hash === '#rankings' ? 'stats' : 'graphic', false);
+
+    // ---- lightbox ----
     var dlg = document.getElementById('pr-lightbox');
     var scroll = document.getElementById('pr-lb-scroll');
     if (!dlg || !dlg.showModal) { return; }   // very old browsers: the inline graphic still shows
@@ -368,7 +483,6 @@
         e.stopPropagation();
         scroll.classList.toggle('actual');
     });
-    // clicking the dark area around the image closes it
     scroll.addEventListener('click', function () { dlg.close(); });
 })();
 </script>

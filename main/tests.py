@@ -780,12 +780,15 @@ class SeasonGraphicTests(TestCase):
         self.assertIsNone(resp.context['graphic'])
         self.assertNotContains(resp, 'pr-graphic-btn')
         self.assertNotContains(resp, 'og:image')
+        self.assertNotContains(resp, 'id="pr-view-stats"')      # no toggle without a graphic
+        self.assertContains(resp, 'class="pr-hero"')
 
     def test_page_with_graphic_shows_hero_and_share_preview(self):
         self.season.graphic.save('dawn.png', SimpleUploadedFile('dawn.png', _png_bytes((300, 200))))
         resp = self.client.get(f'/pr_season/{self.season.pk}')
         self.assertEqual((resp.context['graphic']['width'], resp.context['graphic']['height']), (300, 200))
         self.assertContains(resp, 'pr-graphic-btn')
+        self.assertContains(resp, 'data-view="stats"')      # Graphic / Rankings toggle
         self.assertContains(resp, 'og:image')
         self.assertTrue(resp.context['graphic']['absolute_url'].startswith('http'))
 
