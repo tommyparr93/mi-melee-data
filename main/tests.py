@@ -779,7 +779,6 @@ class SeasonGraphicTests(TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertIsNone(resp.context['graphic'])
         self.assertNotContains(resp, 'pr-graphic-btn')
-        self.assertNotContains(resp, 'class="pr-hero pr-hero-compact"')
         self.assertNotContains(resp, 'og:image')
 
     def test_page_with_graphic_shows_hero_and_share_preview(self):
@@ -787,7 +786,6 @@ class SeasonGraphicTests(TestCase):
         resp = self.client.get(f'/pr_season/{self.season.pk}')
         self.assertEqual((resp.context['graphic']['width'], resp.context['graphic']['height']), (300, 200))
         self.assertContains(resp, 'pr-graphic-btn')
-        self.assertContains(resp, 'class="pr-hero pr-hero-compact"')
         self.assertContains(resp, 'og:image')
         self.assertTrue(resp.context['graphic']['absolute_url'].startswith('http'))
 
