@@ -196,10 +196,6 @@
     .pr-tab:hover { color: #fff; }
     .pr-tab.active { background: #fff; color: #0f172a; box-shadow: 0 2px 8px -2px rgba(0,0,0,0.4); }
     .pr-tab:focus-visible { outline: 2px solid #60a5fa; outline-offset: 2px; }
-    .pr-chips-plain { margin-top: 0; margin-bottom: 1.1rem; }
-    .pr-chips-plain .pr-chip { background: #fff; border-color: #e5e7eb; box-shadow: 0 4px 14px -10px rgba(15,23,42,0.35); }
-    .pr-chips-plain .pr-chip b { color: #0f172a; }
-    .pr-chips-plain .pr-vs { color: #64748b; }
 
     .pr-stage {
         position: relative; overflow: hidden; border-radius: 18px; padding: 1.1rem; background-color: #0b1220;
@@ -308,14 +304,6 @@
 </dialog>
 
 <section id="pr-view-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
-    {% if has_results %}
-    <div class="pr-chips pr-chips-plain">
-        <div class="pr-chip"><b>{{ ranked_count }}</b><span>Ranked</span></div>
-        {% if honorable %}<div class="pr-chip"><b>{{ honorable|length }}</b><span>Honorable mentions</span></div>{% endif %}
-        {% if inactive %}<div class="pr-chip"><b>{{ inactive|length }}</b><span>Inactive mentions</span></div>{% endif %}
-        {% if prev_season %}<span class="pr-vs">Movement shown vs. {{ prev_season.name }}</span>{% endif %}
-    </div>
-    {% endif %}
 {% else %}
 <!-- Hero -->
 <div class="pr-hero">
@@ -431,11 +419,13 @@
 {% endif %}
 
 <p class="pr-foot">Set records count PR-eligible sets at tracked tournaments during this season.</p>
+{% if not graphic %}
 <div class="pr-links">
     <a href="{% url 'pr_table' %}">Head-to-Head Matrix</a>
     <a href="{% url 'analytics' %}">Rank movement &amp; analytics</a>
     <a href="{% url 'journey' %}">Player Journey</a>
 </div>
+{% endif %}
 {% endif %}
 {% if graphic %}</section>{% endif %}
 
