@@ -313,7 +313,7 @@
         </button>
         {% endif %}
     </div>
-    <p class="pr-stage-foot">{% if graphic.video_url %}Use the player&rsquo;s full-screen button for a bigger view{% else %}Tap the graphic to zoom{% endif %} &middot; <a href="#rankings" data-view-link="stats">See the full rankings &amp; stats &rarr;</a></p>
+    <p class="pr-stage-foot">{% if not graphic.video_url %}Tap the graphic to zoom &middot; {% endif %}<a href="#rankings" data-view-link="stats">See the full rankings &amp; stats &rarr;</a></p>
 </section>
 {% if not graphic.video_url %}
 <dialog id="pr-lightbox" aria-label="{{ pr_season.name }} graphic">
