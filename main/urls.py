@@ -1,5 +1,5 @@
 from django.urls import path
-from . import views
+from . import views, views_agent
 from .views import PrEligiblePlayerListView, PRSeasonListView, PRSeasonCreateView, PRSeasonAdminDetailView, PRSeasonUpdateView, HomeView
 
 urlpatterns = [
@@ -31,6 +31,8 @@ urlpatterns = [
     path('analytics/player-search/', views.AnalyticsPlayerSearchView.as_view(), name='analytics_player_search'),
     path('journey/', views.JourneyView.as_view(), name='journey'),
     path('journey/data/', views.JourneyDataView.as_view(), name='journey_data'),
+    path('ask-tom/', views_agent.AskTomView.as_view(), name='ask_tom'),
+    path('ask-tom/message/', views_agent.ask_tom_message, name='ask_tom_message'),
     path('journey/geocode-zip/', views.JourneyZipGeocodeView.as_view(), name='journey_geocode_zip'),
 
 ]

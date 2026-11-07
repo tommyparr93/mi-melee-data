@@ -192,3 +192,13 @@ STORAGES = {
         },
     },
 }
+
+
+# Natural-language data agent (main/agent). 'local' = Ollama (the website's backend),
+# 'claude' = Anthropic API (development/testing only; needs ANTHROPIC_API_KEY in .env).
+AGENT_BACKEND = env('AGENT_BACKEND', default='local')
+AGENT_MAX_STEPS = env.int('AGENT_MAX_STEPS', default=6)
+OLLAMA_URL = env('OLLAMA_URL', default='http://localhost:11434')
+OLLAMA_MODEL = env('OLLAMA_MODEL', default='qwen3:8b')
+ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
+AGENT_CLAUDE_MODEL = env('AGENT_CLAUDE_MODEL', default='claude-sonnet-5-5')
