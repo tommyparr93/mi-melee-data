@@ -27,11 +27,12 @@ pr_rankings(season_id, season, start_date, end_date, player_id, player, rank, ra
 
 RULES
 - Exclude DQs (is_dq = false) when counting wins, losses, records or head-to-heads.
-- Head-to-heads match the website when you also filter pr_eligible = true; say which you used.
+- For head-to-head questions use the get_head_to_head tool, not SQL (it matches the website's H2H page).
 - Players are tags; match with ILIKE and check you got the right person. When a tag is ambiguous,
   prefer the player with the most sets, or show the candidates.
 - "Michigan" events: in_michigan = true. Out-of-state: in_michigan = false.
 - A PR season's events are the tournaments whose date is between the season's start_date and end_date.
+- When your answer names players, also SELECT their player_id so you can link them.
 - Only SELECT. Results are capped at 200 rows, so aggregate and use ORDER BY ... LIMIT.
 - If a query errors, read the message, fix the query and try again.
 """

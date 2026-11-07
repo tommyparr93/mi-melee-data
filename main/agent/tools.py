@@ -10,6 +10,7 @@ from datetime import date
 
 from django.db import DatabaseError, connections
 from django.db.models import Count, Q
+from django.urls import reverse
 
 from .sql_guard import MAX_ROWS, SQLRejected, check_sql
 from main.models import (
@@ -28,8 +29,17 @@ def _limit(value, default, maximum=MAX_LIMIT):
     return max(1, min(value, maximum))
 
 
+def _player_url(player_id):
+    return reverse('player_detail', args=[player_id])
+
+
+def _player_link(player):
+    """Markdown link the chat page renders; built here so the model never has to guess a URL."""
+    return f'[{player.name}]({_player_url(player.id)})'
+
+
 def _player_ref(player):
-    return {'id': player.id, 'name': player.name}
+    return {'id': player.id, 'name': player.name, 'url': _player_url(player.id)}
 
 
 def _rank_key(result):
@@ -66,6 +76,7 @@ def find_player(name, limit=8):
         'players': [{
             'id': p.id,
             'name': p.name,
+            'url': _player_url(p.id),
             'region': p.region_code.name if p.region_code else None,
             'main_character': p.main_char.name if p.main_char else None,
             'pr_eligible': bool(p.pr_eligible),
@@ -133,6 +144,9 @@ def get_head_to_head(player_a_id, player_b_id, pr_eligible_only=True):
         return {'error': 'one or both player ids do not exist'}
     sets = Set.objects.filter(
         Q(player1_id=a.id, player2_id=b.id) | Q(player1_id=b.id, player2_id=a.id))
+    # The analytics H2H page counts every set between the two, so the template's score does too.
+    overall = sets.aggregate(a=Count('id', filter=Q(winner_id=a.id)), b=Count('id', filter=Q(winner_id=b.id)))
+    overview_url = f"{reverse('analytics')}?tab=h2h&p1={a.id}&p2={b.id}"
     if pr_eligible_only:
         sets = sets.filter(pr_eligible=True)
     sets = sets.select_related('tournament').order_by('-tournament__date', '-id')
@@ -157,6 +171,8 @@ def get_head_to_head(player_a_id, player_b_id, pr_eligible_only=True):
         'player_b_wins': b_wins,
         'pr_eligible_sets_only': bool(pr_eligible_only),
         'recent_sets': recent,
+        'answer_format': (f'[H2H overview page]({overview_url})\n'
+                          f"{_player_link(a)} {overall['a']} - {overall['b']} {_player_link(b)}"),
     }
 
 
@@ -308,10 +324,11 @@ _TOOLS = {
         "A player's rank in each power-ranking season they were on.",
         _schema({'player_id': _INT}, ['player_id'])),
     'get_head_to_head': (get_head_to_head,
-        'Set record and recent meetings between two players.',
+        'Head-to-head (H2H / "vs") record and recent meetings between two players. Always use this for '
+        'head-to-head questions instead of run_sql.',
         _schema({'player_a_id': _INT, 'player_b_id': _INT,
                  'pr_eligible_only': {'type': 'boolean',
-                                      'description': 'Only count PR-eligible sets (default true, matches the website)'}},
+                                      'description': 'Only count PR-eligible sets in the stats fields (default true). answer_format always uses all sets, like the website H2H page.'}},
                 ['player_a_id', 'player_b_id'])),
     'get_player_tournament_results': (get_player_tournament_results,
         "A player's tournament placements, newest first. Optionally filter by year.",

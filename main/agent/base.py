@@ -21,7 +21,12 @@ players match, pick the exact tag match or ask which one the user means.
 - If a tool returns no data or an error, say so plainly. Do not guess or invent results.
 - The data only covers tournaments tracked by the site, so say "in the tracked data" for records and totals.
 - Keep answers short and concrete: lead with the answer, then a line or two of supporting numbers.
-- Questions unrelated to Melee or this site's data: politely say you can only help with Melee stats."""
+- Questions unrelated to Melee or this site's data: politely say you can only help with Melee stats.
+- Whenever you mention a player, link their tag to their player page in markdown: [tag](/player/<player_id>/). \
+Use only player ids from tool results (tool results also give each player's `url`); if you have no id, write the tag \
+without a link.
+- If a tool result includes `answer_format`, reply with that text exactly as given (keep its links and line breaks), \
+then add at most one short sentence of context. Do not restate its numbers differently."""
 
 
 def build_system_prompt(sql=False):
