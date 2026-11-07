@@ -226,6 +226,7 @@ class AskTomViewTests(TestCase):
 
     def fake_agent(self, answer='Zain leads 7-2.', calls=('get_head_to_head',), raises=None):
         agent = mock.Mock()
+        agent.model = 'qwen3:8b'
         if raises:
             agent.ask.side_effect = raises
         else:
@@ -258,6 +259,23 @@ class AskTomViewTests(TestCase):
         passed = agent.ask.call_args[0][1]
         self.assertEqual([m['role'] for m in passed], ['user', 'assistant'])
         self.assertEqual(len(passed[1]['content']), views_agent.MAX_HISTORY_CHARS)
+
+    def test_model_picker_uses_allowlist_only(self):
+        agent = self.fake_agent()
+        with self.settings(AGENT_MODEL_PICKER=True, AGENT_MODEL_CHOICES=['qwen3:8b', 'qwen3:14b'],
+                           OLLAMA_MODEL='qwen3:8b'), \
+                mock.patch.object(views_agent, 'get_agent', return_value=agent) as get:
+            self.assertContains(self.client.get(reverse('ask_tom')), 'id="tom-model"')
+            self.post({'question': 'q', 'model': 'qwen3:14b'})
+            self.assertEqual(get.call_args.kwargs, {'model': 'qwen3:14b'})
+            cache.clear()
+            self.post({'question': 'q', 'model': 'llama-evil:70b'})
+            self.assertEqual(get.call_args.kwargs, {})
+        with self.settings(AGENT_MODEL_PICKER=False), \
+                mock.patch.object(views_agent, 'get_agent', return_value=agent) as get:
+            self.assertNotContains(self.client.get(reverse('ask_tom')), 'id="tom-model"')
+            self.post({'question': 'q', 'model': 'qwen3:14b'})
+            self.assertEqual(get.call_args.kwargs, {})
 
     def test_validation(self):
         self.assertEqual(self.post({'question': '   '}).status_code, 400)

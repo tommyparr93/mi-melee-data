@@ -202,6 +202,9 @@ OLLAMA_URL = env('OLLAMA_URL', default='http://localhost:11434')
 OLLAMA_MODEL = env('OLLAMA_MODEL', default='qwen3:8b')
 OLLAMA_THINK = env.bool('OLLAMA_THINK', default=False)
 OLLAMA_NUM_CTX = env.int('OLLAMA_NUM_CTX', default=12288)
+# Models the Ask Tom page lets you switch between (dev or staff only).
+AGENT_MODEL_CHOICES = env.list('AGENT_MODEL_CHOICES', default=['qwen3:8b', 'qwen3:14b'])
+AGENT_MODEL_PICKER = env.bool('AGENT_MODEL_PICKER', default=DEBUG)
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
 AGENT_CLAUDE_MODEL = env('AGENT_CLAUDE_MODEL', default='claude-sonnet-5-5')
 

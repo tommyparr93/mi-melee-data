@@ -1,6 +1,8 @@
 """'Ask Tom' chat page and its message endpoint."""
 import json
+import time
 
+from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.views import generic
@@ -14,7 +16,7 @@ MAX_HISTORY_CHARS = 1500
 RATE_LIMIT = 20                    # questions per client...
 RATE_WINDOW = 10 * 60              # ...per 10 minutes
 BUSY_LOCK_KEY = 'ask-tom-busy'
-BUSY_LOCK_SECONDS = 150            # one local GPU: answer one question at a time
+BUSY_LOCK_SECONDS = 600            # one local GPU: answer one question at a time
 
 SUGGESTIONS = [
     "Who is ranked first in the latest power rankings?",
@@ -24,6 +26,13 @@ SUGGESTIONS = [
 ]
 
 
+def _model_choices(request):
+    """Models this visitor may pick: only in dev or for staff, and only from the allowlist."""
+    if not (settings.AGENT_MODEL_PICKER or request.user.is_staff):
+        return []
+    return list(settings.AGENT_MODEL_CHOICES)
+
+
 class AskTomView(generic.TemplateView):
     template_name = 'main/ask_tom.html'
 
@@ -31,6 +40,8 @@ class AskTomView(generic.TemplateView):
         context = super().get_context_data(**kwargs)
         context['suggestions'] = SUGGESTIONS
         context['max_chars'] = MAX_QUESTION_CHARS
+        context['model_choices'] = _model_choices(self.request)
+        context['default_model'] = settings.OLLAMA_MODEL
         return context
 
 
@@ -81,7 +92,14 @@ def ask_tom_message(request):
         return JsonResponse({'error': 'Tom is answering someone else right now. Try again in a few seconds.'},
                             status=429)
     try:
-        result = get_agent().ask(question, _clean_history(payload.get('history')))
+        overrides = {}
+        model = payload.get('model')
+        if model and model != settings.OLLAMA_MODEL and model in _model_choices(request):
+            overrides['model'] = model
+        start = time.monotonic()
+        agent = get_agent(**overrides)
+        result = agent.ask(question, _clean_history(payload.get('history')))
+        seconds = round(time.monotonic() - start, 1)
     except AgentError:
         return JsonResponse({'error': 'Ask Tom is offline right now. Please try again later.'}, status=503)
     finally:
@@ -91,6 +109,8 @@ def ask_tom_message(request):
         'answer': result.answer or "I couldn't come up with an answer for that.",
         'looked_up': sorted({c.name for c in result.tool_calls}),
         'incomplete': result.stopped_early,
+        'model': getattr(agent, 'model', ''),
+        'seconds': seconds,
         'queries': [c.arguments.get('query', '') for c in result.tool_calls
                     if c.name == 'run_sql' and '"error"' not in c.result[:20]],
     })
