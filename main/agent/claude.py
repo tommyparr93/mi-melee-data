@@ -1,5 +1,5 @@
 """Claude backend (Anthropic SDK). Intended for development and comparison testing."""
-from .base import AgentError, AgentResult, BaseAgent, SYSTEM_PROMPT, ToolCall
+from .base import AgentError, AgentResult, BaseAgent, ToolCall
 from .tools import run_tool, tool_definitions
 
 
@@ -22,7 +22,7 @@ class ClaudeAgent(BaseAgent):
             client = anthropic.Anthropic(api_key=api_key)
         self.client = client
         self.tools = [{'name': t['name'], 'description': t['description'],
-                       'input_schema': t['parameters']} for t in tool_definitions()]
+                       'input_schema': t['parameters']} for t in tool_definitions(sql=self.sql)]
 
     def ask(self, question, history=None):
         messages = [{'role': m['role'], 'content': m['content']} for m in (history or [])]
@@ -32,7 +32,7 @@ class ClaudeAgent(BaseAgent):
         for _ in range(self.max_steps):
             try:
                 response = self.client.messages.create(
-                    model=self.model, max_tokens=self.max_tokens, system=SYSTEM_PROMPT,
+                    model=self.model, max_tokens=self.max_tokens, system=self.system_prompt,
                     tools=self.tools, messages=messages)
             except Exception as exc:  # SDK raises several distinct error types
                 raise AgentError(f'Claude API call failed: {exc}') from exc

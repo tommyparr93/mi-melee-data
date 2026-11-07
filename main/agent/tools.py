@@ -8,8 +8,10 @@ module writes to the database.
 import json
 from datetime import date
 
+from django.db import DatabaseError, connections
 from django.db.models import Count, Q
 
+from .sql_guard import MAX_ROWS, SQLRejected, check_sql
 from main.models import (
     Player, PRSeason, PRSeasonResult, Set, Tournament, TournamentResults,
 )
@@ -261,6 +263,30 @@ def get_pr_rankings(season_id, limit=25):
     }
 
 
+def run_sql(query):
+    """Run one read-only SELECT against the `agent` views on the agent's own DB role."""
+    try:
+        safe = check_sql(query)
+    except SQLRejected as exc:
+        return {'error': str(exc)}
+    try:
+        with connections['agent'].cursor() as cursor:
+            cursor.execute(safe)
+            columns = [c[0] for c in cursor.description]
+            rows = cursor.fetchall()
+    except DatabaseError as exc:
+        connections['agent'].close()         # never reuse a connection left in a failed state
+        message = str(exc).strip().splitlines()[0] if str(exc).strip() else exc.__class__.__name__
+        return {'error': f'database error: {message}'}
+    truncated = len(rows) > MAX_ROWS
+    return {
+        'columns': columns,
+        'rows': [list(r) for r in rows[:MAX_ROWS]],
+        'row_count': min(len(rows), MAX_ROWS),
+        'truncated': truncated,
+    }
+
+
 def _schema(properties, required=()):
     return {'type': 'object', 'properties': properties, 'required': list(required)}
 
@@ -304,13 +330,25 @@ _TOOLS = {
         _schema({'season_id': _INT, 'limit': {**_INT, 'description': 'Default 25'}}, ['season_id'])),
 }
 
+_SQL_TOOL = ('run_sql',
+    run_sql,
+    'Run ONE read-only PostgreSQL SELECT against the agent views described in the system prompt. '
+    'Use it for any question the other tools cannot answer directly (rankings by count, records over '
+    'a period, comparisons, "most/least/first" questions). Returns columns and rows (max 200).',
+    _schema({'query': {'type': 'string', 'description': 'A single SELECT statement'}}, ['query']))
+
 TOOL_FUNCTIONS = {name: spec[0] for name, spec in _TOOLS.items()}
+TOOL_FUNCTIONS[_SQL_TOOL[0]] = _SQL_TOOL[1]
 
 
-def tool_definitions():
+def tool_definitions(sql=False):
     """Backend-neutral tool list: [{'name', 'description', 'parameters'}]."""
-    return [{'name': name, 'description': desc, 'parameters': schema}
+    defs = [{'name': name, 'description': desc, 'parameters': schema}
             for name, (_, desc, schema) in _TOOLS.items()]
+    if sql:
+        name, _, desc, schema = _SQL_TOOL
+        defs.append({'name': name, 'description': desc, 'parameters': schema})
+    return defs
 
 
 def run_tool(name, arguments):

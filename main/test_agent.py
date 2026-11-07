@@ -285,3 +285,61 @@ class AskTomViewTests(TestCase):
             resp = self.post({'question': 'hi'})
         self.assertEqual(resp.status_code, 429)
         get.assert_not_called()
+
+
+from main.agent.base import build_system_prompt
+from main.agent.sql_guard import MAX_ROWS, SQLRejected, check_sql
+
+
+class SqlGuardTests(SimpleTestCase):
+    ALLOWED = [
+        "select player, count(*) from player_sets where won group by 1 order by 2 desc limit 5",
+        "with w as (select player_id, count(*) n from agent.player_sets where won group by 1) select * from w",
+        "select player from players union select tournament from tournaments",
+        "select player, rank() over (order by count(*) desc) from placements group by player",
+    ]
+    REJECTED = [
+        "insert into players values (1)",
+        "update players set player = 'x'",
+        "delete from players",
+        "drop view agent.players",
+        "select 1 from players; drop table player",
+        "select * from public.player",
+        "select * from player",
+        "select * from auth_user",
+        "select pg_sleep(10) from players",
+        "select set_config('default_transaction_read_only', 'off', false)",
+        "select * from players for update",
+        "select * into newtab from players",
+        "copy players to '/tmp/x'",
+        "set statement_timeout = 0",
+        "select * from generate_series(1, 10)",
+        "with d as (delete from players returning *) select * from d",
+        "select * from pg_catalog.pg_user",
+        "select * from information_schema.tables",
+        "select pg_read_file('/etc/passwd')",
+        "select lo_import('/etc/passwd')",
+        "",
+        "select (",
+    ]
+
+    def test_allowed_queries_get_a_row_cap(self):
+        for sql in self.ALLOWED:
+            with self.subTest(sql=sql):
+                self.assertTrue(check_sql(sql).endswith(f'LIMIT {MAX_ROWS + 1}'))
+
+    def test_rejected_queries(self):
+        for sql in self.REJECTED:
+            with self.subTest(sql=sql):
+                with self.assertRaises(SQLRejected):
+                    check_sql(sql)
+
+    def test_run_sql_tool_returns_rejection_as_data(self):
+        data = json.loads(run_tool('run_sql', {'query': 'delete from players'}))
+        self.assertIn('error', data)
+
+    def test_sql_tool_and_guide_only_when_enabled(self):
+        self.assertNotIn('run_sql', [t['name'] for t in tool_definitions()])
+        self.assertIn('run_sql', [t['name'] for t in tool_definitions(sql=True)])
+        self.assertNotIn('player_sets', build_system_prompt(False))
+        self.assertIn('player_sets', build_system_prompt(True))

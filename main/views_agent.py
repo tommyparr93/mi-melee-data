@@ -91,4 +91,6 @@ def ask_tom_message(request):
         'answer': result.answer or "I couldn't come up with an answer for that.",
         'looked_up': sorted({c.name for c in result.tool_calls}),
         'incomplete': result.stopped_early,
+        'queries': [c.arguments.get('query', '') for c in result.tool_calls
+                    if c.name == 'run_sql' and '"error"' not in c.result[:20]],
     })

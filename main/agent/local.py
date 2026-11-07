@@ -1,7 +1,7 @@
 """Local LLM backend: talks to an Ollama server's /api/chat with tool calling."""
 import requests
 
-from .base import AgentError, AgentResult, BaseAgent, SYSTEM_PROMPT, ToolCall
+from .base import AgentError, AgentResult, BaseAgent, ToolCall
 from .tools import run_tool, tool_definitions
 
 
@@ -9,14 +9,15 @@ class OllamaAgent(BaseAgent):
     backend_name = 'local'
 
     def __init__(self, base_url='http://localhost:11434', model='qwen3:8b',
-                 num_ctx=8192, timeout=180, session=None, **kwargs):
+                 num_ctx=8192, timeout=180, session=None, think=False, **kwargs):
         super().__init__(**kwargs)
         self.base_url = base_url.rstrip('/')
         self.model = model
+        self.think = think
         self.num_ctx = num_ctx
         self.timeout = timeout
         self.session = session or requests
-        self.tools = [{'type': 'function', 'function': t} for t in tool_definitions()]
+        self.tools = [{'type': 'function', 'function': t} for t in tool_definitions(sql=self.sql)]
 
     def _chat(self, messages):
         try:
@@ -25,7 +26,7 @@ class OllamaAgent(BaseAgent):
                 'messages': messages,
                 'tools': self.tools,
                 'stream': False,
-                'think': False,
+                'think': self.think,
                 'options': {'num_ctx': self.num_ctx, 'temperature': 0.2},
             }, timeout=self.timeout)
             resp.raise_for_status()
@@ -34,7 +35,7 @@ class OllamaAgent(BaseAgent):
         return resp.json()
 
     def ask(self, question, history=None):
-        messages = [{'role': 'system', 'content': SYSTEM_PROMPT}]
+        messages = [{'role': 'system', 'content': self.system_prompt}]
         messages += [{'role': m['role'], 'content': m['content']} for m in (history or [])]
         messages.append({'role': 'user', 'content': question})
         result = AgentResult(answer='')

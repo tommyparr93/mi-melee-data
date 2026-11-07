@@ -20,6 +20,9 @@
     .tom-msg p:last-child, .tom-msg ul:last-child, .tom-msg ol:last-child { margin-bottom: 0; }
     .tom-msg ul, .tom-msg ol { margin: 0 0 .4rem; padding-left: 1.25rem; }
     .tom-meta { font-size: .75rem; color: #6c757d; margin-top: .35rem; }
+    .tom-sql { margin-top: .35rem; font-size: .75rem; }
+    .tom-sql summary { color: #0d6efd; cursor: pointer; }
+    .tom-sql pre { background: #f1f3f5; border-radius: 6px; padding: .5rem; margin: .35rem 0 0; white-space: pre-wrap; font-size: .75rem; max-height: 220px; overflow: auto; }
     .tom-typing { display: inline-flex; gap: 4px; padding: .2rem 0; }
     .tom-typing span { width: 7px; height: 7px; border-radius: 50%; background: #adb5bd; animation: tom-bounce 1.2s infinite ease-in-out; }
     .tom-typing span:nth-child(2) { animation-delay: .15s; }
@@ -76,7 +79,7 @@
         find_player: 'players', get_player_summary: 'player stats', get_player_pr_history: 'PR history',
         get_head_to_head: 'head-to-head', get_player_tournament_results: 'tournament results',
         find_tournament: 'tournaments', get_tournament_results: 'tournament results',
-        list_pr_seasons: 'PR seasons', get_pr_rankings: 'PR rankings'
+        list_pr_seasons: 'PR seasons', get_pr_rankings: 'PR rankings', run_sql: 'database query'
     };
 
     function esc(s) {
@@ -143,6 +146,11 @@
                     var labels = [];
                     data.looked_up.forEach(function (n) { var l = TOOL_LABELS[n] || n; if (labels.indexOf(l) < 0) { labels.push(l); } });
                     meta = '<div class="tom-meta">Looked up: ' + esc(labels.join(', ')) + '</div>';
+                }
+                if (data.queries && data.queries.length) {
+                    meta += '<details class="tom-sql"><summary>Show the query</summary>' + data.queries.map(function (q) {
+                        return '<pre>' + esc(q) + '</pre>';
+                    }).join('') + '</details>';
                 }
                 if (data.incomplete) { meta += '<div class="tom-meta">This answer may be incomplete. Try a narrower question.</div>'; }
                 typing.innerHTML = render(data.answer) + meta;

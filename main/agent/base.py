@@ -6,6 +6,8 @@ differ in how they talk to the model; the loop shape is shared here.
 """
 from dataclasses import dataclass, field
 
+from .schema_guide import EXAMPLES, SCHEMA_GUIDE
+
 SYSTEM_PROMPT = """\
 You are the MiMeleeStats assistant. You answer questions about Super Smash Bros. \
 Melee in Michigan using only the data returned by your tools: players, set results, \
@@ -20,6 +22,15 @@ players match, pick the exact tag match or ask which one the user means.
 - The data only covers tournaments tracked by the site, so say "in the tracked data" for records and totals.
 - Keep answers short and concrete: lead with the answer, then a line or two of supporting numbers.
 - Questions unrelated to Melee or this site's data: politely say you can only help with Melee stats."""
+
+
+def build_system_prompt(sql=False):
+    if not sql:
+        return SYSTEM_PROMPT
+    return (SYSTEM_PROMPT
+            + '\n- Use the lookup tools for simple player/tournament/PR questions and run_sql for '
+              'anything else. Base every number on query results; if a query returns no rows, say so.\n\n'
+            + SCHEMA_GUIDE + '\n' + EXAMPLES)
 
 
 @dataclass
@@ -46,8 +57,10 @@ class AgentError(Exception):
 class BaseAgent:
     backend_name = 'base'
 
-    def __init__(self, max_steps=6):
+    def __init__(self, max_steps=6, sql=False):
         self.max_steps = max_steps
+        self.sql = sql
+        self.system_prompt = build_system_prompt(sql)
 
     def ask(self, question, history=None):
         """Answer `question`. `history` is a list of {'role': 'user'|'assistant', 'content': str}."""
