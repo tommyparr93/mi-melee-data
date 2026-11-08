@@ -194,20 +194,35 @@ STORAGES = {
 }
 
 
-# Natural-language data agent (main/agent). 'local' = Ollama (the website's backend),
-# 'claude' = Anthropic API (development/testing only; needs ANTHROPIC_API_KEY in .env).
-AGENT_BACKEND = env('AGENT_BACKEND', default='local')
-AGENT_MAX_STEPS = env.int('AGENT_MAX_STEPS', default=8)
-OLLAMA_URL = env('OLLAMA_URL', default='http://localhost:11434')
-OLLAMA_MODEL = env('OLLAMA_MODEL', default='qwen3:8b')
-OLLAMA_THINK = env.bool('OLLAMA_THINK', default=False)
-OLLAMA_NUM_CTX = env.int('OLLAMA_NUM_CTX', default=12288)
-# Models the Ask Tom page lets you switch between (dev or staff only).
-AGENT_MODEL_CHOICES = env.list('AGENT_MODEL_CHOICES', default=['qwen3:8b', 'qwen3:14b'])
-AGENT_MODEL_PICKER = env.bool('AGENT_MODEL_PICKER', default=DEBUG)
+# Natural-language data agent (main/agent). 'claude' = Anthropic API (needs
+# ANTHROPIC_API_KEY), 'local' = Ollama (free, slower, less accurate).
+AGENT_BACKEND = env('AGENT_BACKEND', default='claude')
 ANTHROPIC_API_KEY = env('ANTHROPIC_API_KEY', default='')
-AGENT_CLAUDE_MODEL = env('AGENT_CLAUDE_MODEL', default='claude-sonnet-5-5')
-
+AGENT_CLAUDE_MODEL = env('AGENT_CLAUDE_MODEL', default='claude-haiku-5-5')
+AGENT_CLAUDE_EFFORT = env('AGENT_CLAUDE_EFFORT', default='low')
+OLLAMA_URL = env('OLLAMA_URL', default='http://localhost:11434')
+OLLAMA_MODEL = env('OLLAMA_MODEL', default='qwen3:14b')
+OLLAMA_THINK = env.bool('OLLAMA_THINK', default=False)
+OLLAMA_NUM_CTX = env.int('OLLAMA_NUM_CTX', default=12288)
+
+# Hard limits on what one question can do.
+AGENT_MAX_TOKENS = env.int('AGENT_MAX_TOKENS', default=1024)
+AGENT_MAX_STEPS = env.int('AGENT_MAX_STEPS', default=6)
+AGENT_MAX_TOOL_ROWS = env.int('AGENT_MAX_TOOL_ROWS', default=50)
+
+# Ask Tom chat page. It is off unless DEBUG is on or ASK_TOM_ENABLED=true is set,
+# so a deploy can never switch it on by accident.
+ASK_TOM_ENABLED = env.bool('ASK_TOM_ENABLED', default=DEBUG)
+ASK_TOM_DAILY_BUDGET_USD = env('ASK_TOM_DAILY_BUDGET_USD', default='0.50')
+ASK_TOM_RATE_PER_MINUTE = env.int('ASK_TOM_RATE_PER_MINUTE', default=5)
+ASK_TOM_MESSAGES_PER_DAY = env.int('ASK_TOM_MESSAGES_PER_DAY', default=30)
+ASK_TOM_TURNS_PER_CONVERSATION = env.int('ASK_TOM_TURNS_PER_CONVERSATION', default=12)
+ASK_TOM_MAX_INPUT_CHARS = env.int('ASK_TOM_MAX_INPUT_CHARS', default=500)
+ASK_TOM_HISTORY_MESSAGES = env.int('ASK_TOM_HISTORY_MESSAGES', default=6)
+# Only behind a reverse proxy: the META name of a header the proxy itself sets,
+# such as HTTP_X_REAL_IP. Blank means use the connection address.
+ASK_TOM_CLIENT_IP_HEADER = env('ASK_TOM_CLIENT_IP_HEADER', default='')
+
 # Read-only connection for the agent's SQL tool. Only defined when the role exists
 # (see main/agent/sql/create_agent_role.sql). The role itself is read-only with a
 # 5s statement timeout; these options repeat that per connection.

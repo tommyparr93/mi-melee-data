@@ -1,7 +1,10 @@
-"""Local LLM backend: talks to an Ollama server's /api/chat with tool calling."""
+"""Optional local backend: talks to an Ollama server's /api/chat with tool calling.
+
+Select it with AGENT_BACKEND=local. It costs nothing to run, so the budget does not apply.
+"""
 import requests
 
-from .base import AgentError, AgentResult, BaseAgent, ToolCall
+from .base import AgentError, AgentResult, BaseAgent, ToolCall, date_note
 from .tools import run_tool, tool_definitions
 
 
@@ -9,7 +12,7 @@ class OllamaAgent(BaseAgent):
     backend_name = 'local'
 
     def __init__(self, base_url='http://localhost:11434', model='qwen3:8b',
-                 num_ctx=8192, timeout=180, session=None, think=False, **kwargs):
+                 num_ctx=8192, timeout=180, session=None, think=False, tool_runner=run_tool, **kwargs):
         super().__init__(**kwargs)
         self.base_url = base_url.rstrip('/')
         self.model = model
@@ -17,6 +20,7 @@ class OllamaAgent(BaseAgent):
         self.num_ctx = num_ctx
         self.timeout = timeout
         self.session = session or requests
+        self.tool_runner = tool_runner
         self.tools = [{'type': 'function', 'function': t} for t in tool_definitions(sql=self.sql)]
 
     def _chat(self, messages):
@@ -34,11 +38,11 @@ class OllamaAgent(BaseAgent):
             raise AgentError(f'Could not reach Ollama at {self.base_url}: {exc}') from exc
         return resp.json()
 
-    def ask(self, question, history=None):
-        messages = [{'role': 'system', 'content': self.system_prompt}]
+    def run(self, question, history=None, result=None):
+        result = result if result is not None else AgentResult()
+        messages = [{'role': 'system', 'content': f'{self.system_prompt}\n\n{date_note()}'}]
         messages += [{'role': m['role'], 'content': m['content']} for m in (history or [])]
         messages.append({'role': 'user', 'content': question})
-        result = AgentResult(answer='')
 
         for _ in range(self.max_steps):
             data = self._chat(messages)
@@ -49,15 +53,18 @@ class OllamaAgent(BaseAgent):
             calls = message.get('tool_calls') or []
             if not calls:
                 result.answer = (message.get('content') or '').strip()
-                return result
+                yield 'text', result.answer
+                yield 'done', result
+                return
 
             messages.append({'role': 'assistant', 'content': message.get('content') or '',
                              'tool_calls': calls})
             for call in calls:
                 fn = call.get('function') or {}
                 name, args = fn.get('name', ''), fn.get('arguments') or {}
-                output = run_tool(name, args)
+                yield 'tool', name
+                output = self.tool_runner(name, args)
                 result.tool_calls.append(ToolCall(name, args if isinstance(args, dict) else {}, output))
                 messages.append({'role': 'tool', 'tool_name': name, 'content': output})
 
-        return self._fallback_answer(result)
+        yield 'done', self._give_up(result)

@@ -4,7 +4,7 @@ from main.agent import BACKENDS, AgentError, get_agent
 
 
 class Command(BaseCommand):
-    help = 'Ask the Melee data agent a question from the terminal (local Ollama or Claude).'
+    help = 'Ask the Melee data agent a question from the terminal (Claude or local Ollama).'
 
     def add_arguments(self, parser):
         parser.add_argument('question', nargs='*', help='Question to ask. Omit for an interactive chat.')
@@ -41,7 +41,7 @@ class Command(BaseCommand):
         try:
             result = agent.ask(question, history)
         except AgentError as exc:
-            self.stderr.write(self.style.ERROR(str(exc)))
+            self.stderr.write(self.style.ERROR(str(exc) or exc.__class__.__name__))
             return None
         if verbose:
             for call in result.tool_calls:
@@ -50,5 +50,7 @@ class Command(BaseCommand):
         self.stdout.write(f'\n{result.answer}\n')
         self.stdout.write(self.style.NOTICE(
             f'[{result.steps} step(s), {len(result.tool_calls)} tool call(s), '
-            f'{result.input_tokens} in / {result.output_tokens} out tokens]'))
+            f'{result.input_tokens} in / {result.output_tokens} out / '
+            f'{result.cache_read_tokens} cache read / {result.cache_write_tokens} cache write, '
+            f'${result.cost_usd:.4f}]'))
         return result.answer

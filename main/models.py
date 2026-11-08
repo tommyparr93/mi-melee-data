@@ -272,3 +272,37 @@ class SyncErrorLog(models.Model):
         ordering = ['-timestamp']
 
 
+class AgentBudgetDay(models.Model):
+    """One row per day: what Ask Tom has spent, and what in-flight calls have on hold."""
+    day = models.DateField(primary_key=True)
+    spent_usd = models.DecimalField(max_digits=12, decimal_places=8, default=0)
+    reserved_usd = models.DecimalField(max_digits=12, decimal_places=8, default=0)
+    credit_exhausted = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = 'agent_budget_day'
+
+
+class AgentTurn(models.Model):
+    """One question and answer. This is both the audit log and the rate-limit counter."""
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    source = models.CharField(max_length=10, default='web')     # web or eval
+    conversation_id = models.CharField(max_length=32, blank=True, db_index=True)
+    ip_hash = models.CharField(max_length=32, blank=True, db_index=True)
+    session_hash = models.CharField(max_length=32, blank=True, db_index=True)
+    backend = models.CharField(max_length=10, blank=True)
+    model = models.CharField(max_length=60, blank=True)
+    question = models.TextField()
+    answer = models.TextField(blank=True)
+    tools = models.JSONField(default=list, blank=True)
+    steps = models.IntegerField(default=0)
+    input_tokens = models.IntegerField(default=0)
+    output_tokens = models.IntegerField(default=0)
+    cache_read_tokens = models.IntegerField(default=0)
+    cache_write_tokens = models.IntegerField(default=0)
+    cost_usd = models.DecimalField(max_digits=12, decimal_places=8, default=0)
+    outcome = models.CharField(max_length=12, default='started')
+    seconds = models.FloatField(default=0)
+
+    class Meta:
+        db_table = 'agent_turn'
