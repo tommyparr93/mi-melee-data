@@ -33,6 +33,7 @@ urlpatterns = [
     path('journey/data/', views.JourneyDataView.as_view(), name='journey_data'),
     path('ask-tom/', views_agent.AskTomView.as_view(), name='ask_tom'),
     path('ask-tom/message/', views_agent.ask_tom_message, name='ask_tom_message'),
+    path('ask-tom/report/', views_agent.ask_tom_report, name='ask_tom_report'),
     path('journey/geocode-zip/', views.JourneyZipGeocodeView.as_view(), name='journey_geocode_zip'),
 
 ]

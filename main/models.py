@@ -303,6 +303,8 @@ class AgentTurn(models.Model):
     cost_usd = models.DecimalField(max_digits=12, decimal_places=8, default=0)
     outcome = models.CharField(max_length=12, default='started')
     seconds = models.FloatField(default=0)
+    reported_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    report_note = models.TextField(blank=True)
 
     class Meta:
         db_table = 'agent_turn'

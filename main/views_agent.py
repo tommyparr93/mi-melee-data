@@ -4,13 +4,19 @@ import logging
 import time
 
 from django.conf import settings
+from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import JsonResponse, StreamingHttpResponse
+from django.utils import timezone
 from django.views import generic
 from django.views.decorators.http import require_POST
 
 from main.agent import AgentError, AgentResult, BudgetExceeded, CreditExhausted, get_agent
 from main.agent.base import TOOL_LABELS
-from main.agent.limits import Rejected, admit, conversation_history, conversation_id, finish_turn
+from main.agent.links import add_links
+from main.agent.limits import (
+    CONVERSATION_KEY, Rejected, admit, conversation_history, conversation_id, finish_turn,
+)
+from main.models import AgentTurn
 
 logger = logging.getLogger(__name__)
 
@@ -21,13 +27,18 @@ SUGGESTIONS = [
     "Show me Ferrety's PR history",
 ]
 
+NOT_ALLOWED_MESSAGE = 'Ask Tom is only available to site admins.'
 DISABLED_MESSAGE = 'Ask Tom is switched off right now. Please check back later.'
 BUDGET_MESSAGE = "Tom's done answering questions for today. Come back tomorrow!"
 OFFLINE_MESSAGE = 'Ask Tom is offline right now. Please try again later.'
+MAX_REPORT_CHARS = 500
 
 
-class AskTomView(generic.TemplateView):
+class AskTomView(LoginRequiredMixin, UserPassesTestMixin, generic.TemplateView):
     template_name = 'main/ask_tom.html'
+
+    def test_func(self):
+        return self.request.user.is_superuser
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -59,9 +70,10 @@ def _stream_answer(request, turn, question, history):
                 yield _line(type='text', text=value)
             elif kind == 'tool':
                 yield _line(type='tool', label=TOOL_LABELS.get(value, 'data'))
+        result.answer = add_links(result.answer, result.tool_calls)
         outcome = 'incomplete' if result.stopped_early else 'ok'
         done = {'answer': result.answer or "I couldn't come up with an answer for that.",
-                'incomplete': result.stopped_early}
+                'incomplete': result.stopped_early, 'turn_id': turn.id}
         if request.user.is_staff or settings.DEBUG:
             done['queries'] = [c.arguments.get('query', '') for c in result.tool_calls
                                if c.name == 'run_sql' and not c.result.startswith('{"error"')]
@@ -88,6 +100,8 @@ def _stream_answer(request, turn, question, history):
 
 @require_POST
 def ask_tom_message(request):
+    if not request.user.is_superuser:
+        return JsonResponse({'error': NOT_ALLOWED_MESSAGE}, status=403)
     if not settings.ASK_TOM_ENABLED:
         return JsonResponse({'error': DISABLED_MESSAGE}, status=503)
     try:
@@ -124,3 +138,25 @@ def ask_tom_message(request):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'         # tell nginx not to hold the stream back
     return response
+
+
+@require_POST
+def ask_tom_report(request):
+    """Flag an answer as bad. Only answers from the visitor's own current chat can be flagged."""
+    if not request.user.is_superuser:
+        return JsonResponse({'error': NOT_ALLOWED_MESSAGE}, status=403)
+    try:
+        payload = json.loads(request.body or b'{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Bad request.'}, status=400)
+    turn_id = payload.get('turn_id') if isinstance(payload, dict) else None
+    if not isinstance(turn_id, int):
+        return JsonResponse({'error': 'Bad request.'}, status=400)
+    turn = AgentTurn.objects.filter(pk=turn_id, source='web',
+                                    conversation_id=request.session.get(CONVERSATION_KEY)).first()
+    if turn is None:
+        return JsonResponse({'error': 'That answer was not found.'}, status=404)
+    turn.reported_at = timezone.now()
+    turn.report_note = str(payload.get('note') or '').strip()[:MAX_REPORT_CHARS]
+    turn.save(update_fields=['reported_at', 'report_note'])
+    return JsonResponse({'ok': True})

@@ -29,6 +29,9 @@ def _pid(tag):
 _DAWN = "(SELECT season_id FROM agent.pr_seasons WHERE season = '2026 Dawn')"
 _SF25 = "(SELECT season_id FROM agent.pr_seasons WHERE season = '2025 Summer-Fall')"
 
+_SELF_CORRECTION = ['correct my', 'should have checked', "hadn't looked", 'earlier reply', 'earlier answer',
+                    'previous reply', 'previous answer', 'apolog', 'my mistake']
+
 CASES = [
     # ---- easy: one lookup ----
     dict(id='e1', level='easy', question='Who won Tipped Off 16?', check='names',
@@ -40,7 +43,7 @@ CASES = [
     dict(id='e4', level='easy', question='What rank was Ferrety on the 2025 Summer-Fall power rankings?', check='number',
          sql=f"SELECT rank FROM agent.pr_rankings WHERE season_id = {_SF25} AND player = 'Ferrety'"),
     dict(id='e5', level='easy', question='How many PR seasons have published rankings?', check='number',
-         sql="SELECT count(*) FROM agent.pr_seasons WHERE ranked_players > 0"),
+         sql="SELECT count(*) FROM agent.pr_seasons WHERE ranked_players > 0 AND scope = 'michigan'"),
     dict(id='e6', level='easy', question='Who got second at Tipped Off 16?', check='names',
          sql="SELECT player FROM agent.placements WHERE tournament ILIKE 'Tipped Off 16%' AND placement = 2"),
 
@@ -111,7 +114,7 @@ CASES = [
     dict(id='a2', level='ambiguous', question="What was Adam's best placement?", check='clarify'),
     dict(id='a3', level='ambiguous', question='Who is the best player in Michigan?', check='names',
          sql="SELECT player FROM agent.pr_rankings WHERE rank = 1 AND season_id = (SELECT season_id FROM "
-             "agent.pr_seasons WHERE ranked_players > 0 ORDER BY start_date DESC LIMIT 1)"),
+             "agent.pr_seasons WHERE ranked_players > 0 AND scope = 'michigan' ORDER BY start_date DESC LIMIT 1)"),
 
     # ---- no data: must admit it rather than invent something ----
     dict(id='n1', level='no-data', question='What is the head to head between Zain and xQzNotARealPlayer99?',
@@ -159,12 +162,34 @@ CASES = [
     dict(id='t5', level='site-tools', question='Which PR-eligible player has the highest set win rate in the active PR season?',
          check='top',
          sql="SELECT ps.player, round(100.0 * count(*) FILTER (WHERE ps.won) / count(*)) FROM agent.player_sets ps "
-             "JOIN agent.players p ON p.player_id = ps.player_id JOIN agent.pr_seasons s ON s.is_active "
+             "JOIN agent.players p ON p.player_id = ps.player_id JOIN agent.pr_seasons s ON s.is_active AND s.scope = 'michigan' "
              "WHERE p.pr_eligible AND ps.pr_eligible AND ps.date >= s.start_date "
              "GROUP BY ps.player_id, ps.player ORDER BY 2 DESC LIMIT 10"),
     dict(id='t6', level='site-tools', question="In the active PR season, what is Ferrety's set record against other PR-eligible players?",
          check='numbers',
          sql=f"SELECT count(*) FILTER (WHERE ps.won), count(*) FILTER (WHERE NOT ps.won) FROM agent.player_sets ps "
-             f"JOIN agent.players o ON o.player_id = ps.opponent_id JOIN agent.pr_seasons s ON s.is_active "
+             f"JOIN agent.players o ON o.player_id = ps.opponent_id JOIN agent.pr_seasons s ON s.is_active AND s.scope = 'michigan' "
              f"WHERE ps.player_id = {_pid('Ferrety')} AND o.pr_eligible AND ps.pr_eligible AND ps.date >= s.start_date"),
+
+    # ---- Michigan PRs and national lists are separate ----
+    dict(id='p1', level='site-tools', question='How many Michigan PR seasons has Cody Schwab appeared on?', check='number',
+         sql=f"SELECT count(*) FROM agent.pr_rankings WHERE scope = 'michigan' "
+             f"AND player_id = {_pid('Cody Schwab (#2, SSBM Rank 2025)')}"),
+    dict(id='p2', level='site-tools', question='What was Cody Schwab ranked on SSBMRank 2025?', check='number',
+         sql=f"SELECT rank FROM agent.pr_rankings WHERE scope = 'national' AND season = 'SSBMRank 2025' "
+             f"AND player_id = {_pid('Cody Schwab (#2, SSBM Rank 2025)')}"),
+
+    # ---- answers must not show database ids ----
+    dict(id='d1', level='site-tools', question='top players of 2025', check='safe',
+         forbid=['player_id', '500427', '61212', 'id:']),
+    dict(id='d2', level='site-tools', question='Show me the top 10 of the 2025 Summer-Fall PR with their records.', check='safe',
+         forbid=['player_id', '500427', '61212', 'id:']),
+
+    # ---- follow-up: earlier answers arrive as plain text, without the lookups behind them ----
+    dict(id='f1', level='follow-up', question='Who did he last beat?', check='safe', forbid=_SELF_CORRECTION,
+         history=[{'role': 'user', 'content': 'What is Ferrety\'s main character?'},
+                  {'role': 'assistant', 'content': 'Ferrety mains Sheik and is from Michigan, with 982 sets on record.'}]),
+    dict(id='f2', level='follow-up', question='What about his PR history?', check='safe', forbid=_SELF_CORRECTION,
+         history=[{'role': 'user', 'content': 'Who won Tipped Off 16?'},
+                  {'role': 'assistant', 'content': 'Cody Schwab won Tipped Off 16, with Zain second.'}]),
 ]

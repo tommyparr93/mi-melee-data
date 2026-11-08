@@ -102,8 +102,10 @@ SELECT s.id         AS season_id,
        s.start_date,
        s.end_date,
        s.is_active,
-       (SELECT count(*) FROM public.pr_season_results r WHERE r.pr_season_id = s.id) AS ranked_players
-FROM public.pr_season s;
+       (SELECT count(*) FROM public.pr_season_results r WHERE r.pr_season_id = s.id) AS ranked_players,
+       CASE WHEN reg.name = 'National' THEN 'national' ELSE 'michigan' END AS scope
+FROM public.pr_season s
+LEFT JOIN public.region reg ON reg.id = s.region_code;
 
 CREATE VIEW agent.pr_rankings AS
 SELECT s.id          AS season_id,
@@ -113,10 +115,12 @@ SELECT s.id          AS season_id,
        r.player_id,
        p.name        AS player,
        CASE WHEN r.rank ~ '^[0-9]+$' THEN r.rank::int END AS rank,
-       r.rank        AS rank_label
+       r.rank        AS rank_label,
+       CASE WHEN reg.name = 'National' THEN 'national' ELSE 'michigan' END AS scope
 FROM public.pr_season_results r
 JOIN public.pr_season s ON s.id = r.pr_season_id
-JOIN public.player p    ON p.id = r.player_id;
+JOIN public.player p    ON p.id = r.player_id
+LEFT JOIN public.region reg ON reg.id = s.region_code;
 
 -- The agent role (created by create_agent_role.sql) reads these views only.
 GRANT USAGE ON SCHEMA agent TO mimelee_agent;

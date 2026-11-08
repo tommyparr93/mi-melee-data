@@ -6,6 +6,7 @@ from unittest import mock
 
 import anthropic
 import httpx2
+from django.contrib.auth.models import User
 from django.db import connection
 from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
@@ -16,6 +17,7 @@ from main.agent.base import AgentError, AgentResult, ToolCall, build_system_prom
 from main.agent.budget import DailyBudget
 from main.agent.claude import REFUSAL_ANSWER, ClaudeAgent
 from main.agent.eval_cases import CASES
+from main.agent.links import add_links
 from main.agent.local import OllamaAgent
 from main.agent.sql_guard import SQLRejected, check_sql, max_rows
 from main.agent.tools import MAX_RESULT_CHARS, run_tool, tool_definitions
@@ -120,6 +122,26 @@ class ToolTests(TestCase):
         self.assertEqual((data['total_wins'], data['total_losses']), (0, 1))
         self.assertEqual(data['matchups'][0]['opponent'], 'Zain')
         self.assertIn('error', self.call('get_pr_h2h_table', player_id=self.rival.id))
+
+    def _add_national_list(self):
+        national = Region.objects.create(id=10, name='National')
+        season = PRSeason.objects.create(name='SSBMRank 2030', start_date=datetime.date(2030, 1, 1), region_code=national)
+        PRSeasonResult.objects.create(player=self.zain, pr_season=season, rank='1')
+        return season
+
+    def test_national_lists_are_not_michigan_seasons(self):
+        season = self._add_national_list()
+        self.assertEqual([s['name'] for s in self.call('list_pr_seasons')['newest_first']], ['Winter 2025'])
+        national = self.call('list_pr_seasons', scope='national')['newest_first']
+        self.assertEqual([(s['name'], s['scope']) for s in national], [('SSBMRank 2030', 'national')])
+        self.assertEqual(self.call('get_pr_rankings', season_id=season.id)['season']['scope'], 'national')
+        self.assertIn('error', self.call('get_pr_shortlist', season_id=season.id))
+
+    def test_profile_keeps_national_ranks_out_of_pr_history(self):
+        self._add_national_list()
+        data = self.call('get_player_profile', player_id=self.zain.id)
+        self.assertEqual([r['season'] for r in data['pr_history']], ['Winter 2025'])
+        self.assertEqual([r['rank'] for r in data['national_rankings']], ['1'])
 
     def test_records(self):
         data = self.call('get_records', year=2025)
@@ -448,6 +470,12 @@ class FactoryTests(SimpleTestCase):
 class AskTomViewTests(TestCase):
     def setUp(self):
         self.url = reverse('ask_tom_message')
+        self.user = User.objects.create_user('boss', is_superuser=True)
+        self.client.force_login(self.user)
+
+    def new_session(self):
+        self.client.cookies.clear()
+        self.client.force_login(self.user)
 
     def post(self, body, **extra):
         return self.client.post(self.url, data=json.dumps(body), content_type='application/json', **extra)
@@ -481,7 +509,50 @@ class AskTomViewTests(TestCase):
     def test_page_renders_and_nav_links_to_it(self):
         resp = self.client.get(reverse('ask_tom'))
         self.assertContains(resp, 'id="tom-form"')
+        self.assertContains(resp, 'Questions are saved')
         self.assertContains(self.client.get(reverse('home')), 'href="/ask-tom/"')
+
+    def test_only_superusers_get_the_page_and_nav_link(self):
+        page, home = reverse('ask_tom'), reverse('home')
+        self.assertEqual(self.client.get(page).status_code, 200)
+        self.client.logout()
+        self.assertEqual(self.client.get(page).status_code, 302)
+        self.assertNotContains(self.client.get(home), 'href="/ask-tom/"')
+        self.client.force_login(User.objects.create_user('regular', is_staff=True))
+        self.assertEqual(self.client.get(page).status_code, 403)
+        self.assertNotContains(self.client.get(home), 'href="/ask-tom/"')
+
+    def test_only_superusers_can_ask(self):
+        with mock.patch.object(views_agent, 'get_agent') as get:
+            self.client.logout()
+            self.assertEqual(self.post({'question': 'hi'}).status_code, 403)
+            self.client.force_login(User.objects.create_user('regular', is_staff=True))
+            self.assertEqual(self.post({'question': 'hi'}).status_code, 403)
+        get.assert_not_called()
+        self.assertEqual(AgentTurn.objects.count(), 0)
+
+    def report(self, body):
+        return self.client.post(reverse('ask_tom_report'), data=json.dumps(body), content_type='application/json')
+
+    def test_reporting_an_answer_flags_its_log_row(self):
+        done = self.ask()[-1]
+        self.assertEqual(self.report({'turn_id': done['turn_id'], 'note': 'x' * 900}).status_code, 200)
+        turn = AgentTurn.objects.get()
+        self.assertIsNotNone(turn.reported_at)
+        self.assertEqual(len(turn.report_note), views_agent.MAX_REPORT_CHARS)
+
+    def test_reports_are_limited_to_your_own_chat(self):
+        done = self.ask()[-1]
+        self.assertEqual(self.report({'turn_id': 99999}).status_code, 404)
+        self.ask(new_chat=True)
+        self.assertEqual(self.report({'turn_id': done['turn_id']}).status_code, 404)
+        self.assertEqual(self.report({'turn_id': 'abc'}).status_code, 400)
+        self.assertFalse(AgentTurn.objects.exclude(reported_at=None).exists())
+
+    def test_only_superusers_can_report(self):
+        done = self.ask()[-1]
+        self.client.force_login(User.objects.create_user('regular', is_staff=True))
+        self.assertEqual(self.report({'turn_id': done['turn_id']}).status_code, 403)
 
     def test_answer_streams_labels_not_tool_names(self):
         events = self.ask()
@@ -569,19 +640,19 @@ class AskTomViewTests(TestCase):
     def test_rate_limit_is_per_ip_across_sessions(self):
         with override_settings(ASK_TOM_RATE_PER_MINUTE=1):
             self.ask(REMOTE_ADDR='203.0.113.9')
-            self.client.cookies.clear()
+            self.new_session()
             self.assertEqual(self.ask(REMOTE_ADDR='203.0.113.9').status_code, 429)
 
     def test_forwarded_header_cannot_dodge_the_ip_limit(self):
         with override_settings(ASK_TOM_RATE_PER_MINUTE=1):
             self.ask(REMOTE_ADDR='203.0.113.9', HTTP_X_FORWARDED_FOR='1.1.1.1')
-            self.client.cookies.clear()
+            self.new_session()
             self.assertEqual(self.ask(REMOTE_ADDR='203.0.113.9', HTTP_X_FORWARDED_FOR='2.2.2.2').status_code, 429)
 
     @override_settings(ASK_TOM_CLIENT_IP_HEADER='HTTP_X_REAL_IP', ASK_TOM_RATE_PER_MINUTE=1)
     def test_configured_proxy_header_is_used(self):
         self.ask(REMOTE_ADDR='127.0.0.1', HTTP_X_REAL_IP='203.0.113.1')
-        self.client.cookies.clear()
+        self.new_session()
         self.assertEqual(self.ask(REMOTE_ADDR='127.0.0.1', HTTP_X_REAL_IP='203.0.113.2')[0]['type'], 'tool')
 
     @override_settings(ASK_TOM_MESSAGES_PER_DAY=1)
@@ -599,11 +670,58 @@ class AskTomViewTests(TestCase):
     def test_queries_and_cost_are_staff_only(self):
         calls = [ToolCall('run_sql', {'query': 'SELECT secret'}, '{"rows":[]}')]
         self.assertNotIn('SELECT secret', json.dumps(self.ask(self.fake_agent(calls=calls))))
-        from django.contrib.auth.models import User
-        self.client.force_login(User.objects.create_user('staff', is_staff=True))
+        self.client.force_login(User.objects.create_user('staff', is_staff=True, is_superuser=True))
         done = self.ask(self.fake_agent(calls=calls), new_chat=True)[-1]
         self.assertEqual(done['queries'], ['SELECT secret'])
         self.assertIn('$0.0020', done['meta'])
+
+
+class AddLinksTests(SimpleTestCase):
+    def calls(self, *results):
+        return [ToolCall('x', {}, json.dumps(r)) for r in results]
+
+    def test_every_mention_in_a_list_is_linked(self):
+        calls = self.calls({'rankings': [{'rank': '1', 'player_id': 4, 'player': 'Ossify'},
+                                         {'rank': '2', 'player_id': 5, 'player': 'Captain Crack'}]})
+        self.assertEqual(add_links('#1 **Ossify**, #2 Captain Crack. Ossify won.', calls),
+                         '#1 **[Ossify](/player/4/)**, #2 [Captain Crack](/player/5/). [Ossify](/player/4/) won.')
+
+    def test_ranking_suffix_is_dropped_for_matching(self):
+        calls = self.calls({'players': [{'id': 9, 'name': 'Zain (#1, SSBMRank 2025)'}]})
+        self.assertEqual(add_links('Zain won', calls), '[Zain](/player/9/) won')
+
+    def test_shared_tags_are_left_alone(self):
+        calls = self.calls({'players': [{'id': 1, 'name': 'Adam'}, {'id': 2, 'name': 'Adam'}]})
+        self.assertEqual(add_links('Adam won', calls), 'Adam won')
+
+    def test_existing_links_and_longer_words_are_not_touched(self):
+        calls = self.calls({'player': {'id': 1, 'name': 'Zain'}})
+        self.assertEqual(add_links('[Zain](/player/1/) beat Zainy', calls), '[Zain](/player/1/) beat Zainy')
+
+    def test_link_without_an_id_is_repaired(self):
+        calls = self.calls({'player_id': 7, 'player': 'Rich'})
+        self.assertEqual(add_links('[Rich](/player/) won', calls), '[Rich](/player/7/) won')
+
+    def test_tournaments_and_seasons(self):
+        calls = self.calls({'tournaments': [{'id': 3, 'name': 'Tipped Off 15'}],
+                            'season': {'id': 8, 'name': 'Winter 2025'}})
+        self.assertEqual(add_links('Tipped Off 15 in Winter 2025', calls),
+                         '[Tipped Off 15](/tournaments/3) in Winter 2025')
+
+    def test_query_results_are_used(self):
+        calls = self.calls({'columns': ['player_id', 'player', 'wins'], 'rows': [[2, 'Colm', 9]]})
+        self.assertEqual(add_links('Colm has 9', calls), '[Colm](/player/2/) has 9')
+
+    def test_ids_repeated_after_a_link_are_removed(self):
+        calls = self.calls({'player_id': 42, 'player': 'Ossify'})
+        for text in ('Ossify (42)', 'Ossify (player_id 42)', 'Ossify (id: 42)'):
+            with self.subTest(text=text):
+                self.assertEqual(add_links(text, calls), '[Ossify](/player/42/)')
+        self.assertEqual(add_links('**Ossify** (player_id 42)', calls), '**[Ossify](/player/42/)**')
+        self.assertEqual(add_links('Ossify (43)', calls), '[Ossify](/player/42/) (43)')
+
+    def test_cut_off_results_are_ignored(self):
+        self.assertEqual(add_links('Colm', [ToolCall('x', {}, '{"player":"Co... [truncated')]), 'Colm')
 
 
 class SqlGuardTests(SimpleTestCase):
@@ -680,7 +798,7 @@ class EvalGraderTests(SimpleTestCase):
 
     def test_case_mix(self):
         levels = {c['level'] for c in CASES}
-        self.assertEqual(levels, {'easy', 'medium', 'multi-step', 'site-tools', 'ambiguous', 'no-data', 'off-topic', 'injection'})
+        self.assertEqual(levels, {'easy', 'medium', 'multi-step', 'site-tools', 'follow-up', 'ambiguous', 'no-data', 'off-topic', 'injection'})
         self.assertGreaterEqual(len(CASES), 30)
         self.assertEqual(len({c['id'] for c in CASES}), len(CASES))
 

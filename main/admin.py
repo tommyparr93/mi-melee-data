@@ -1,7 +1,7 @@
 from django.contrib import admin, messages
 
 
-from .models import Player, Set, Tournament, Region, PRSeason, PRSeasonResult, SyncErrorLog, Character
+from .models import AgentTurn, Player, Set, Tournament, Region, PRSeason, PRSeasonResult, SyncErrorLog, Character
 
 # 1. Register simple models as before
 admin.site.register(Region)
@@ -15,6 +15,15 @@ class SyncErrorLogAdmin(admin.ModelAdmin):
     list_filter = ('is_resolved',)
     search_fields = ('tournament_name', 'tournament_slug', 'error_message')
     readonly_fields = ('timestamp',)
+
+
+@admin.register(AgentTurn)
+class AgentTurnAdmin(admin.ModelAdmin):
+    """Ask Tom's log. Filter on "Reported at" to see the answers people flagged."""
+    list_display = ('created_at', 'question', 'outcome', 'reported_at', 'report_note', 'model', 'steps', 'cost_usd')
+    list_filter = ('reported_at', 'outcome', 'source')
+    search_fields = ('question', 'answer', 'report_note')
+    readonly_fields = [f.name for f in AgentTurn._meta.fields]
 
 
 # 2. Optimized PlayerAdmin

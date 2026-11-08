@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 
 MAX_RESULT_CHARS = 8000
 MICHIGAN_REGION = 7              # the site's region code for Michigan events
+_NATIONAL = Q(region_code__name='National')       # SSBMRank lists, stored as PR seasons
 
 
 def _limit(value, default, maximum=None):
@@ -69,9 +70,14 @@ def _opponent_id(s, player_id):
 
 
 def _season(season_id=None):
+    michigan = PRSeason.objects.exclude(_NATIONAL)
     if season_id:
-        return PRSeason.objects.filter(pk=int(season_id)).first()
-    return PRSeason.objects.filter(is_active=True).first()
+        return michigan.filter(pk=int(season_id)).first()
+    return michigan.filter(is_active=True).first()
+
+
+def _scope(season):
+    return 'national' if season.region_code and season.region_code.name == 'National' else 'michigan'
 
 
 def search_players(query, limit=8):
@@ -97,8 +103,9 @@ def search_players(query, limit=8):
     }
 
 
-def _pr_history(player_id):
-    rows = list(PRSeasonResult.objects.filter(player_id=player_id).select_related('pr_season'))
+def _pr_history(player_id, scope='michigan'):
+    rows = [r for r in PRSeasonResult.objects.filter(player_id=player_id).select_related('pr_season__region_code')
+            if _scope(r.pr_season) == scope]
     rows.sort(key=lambda r: (r.pr_season.start_date or date.min, r.pr_season_id), reverse=True)
     return [{'season_id': r.pr_season_id, 'season': r.pr_season.name, 'rank': r.rank} for r in rows]
 
@@ -117,6 +124,7 @@ def get_player_profile(player_id):
         mine, theirs = ((s.player1_score, s.player2_score) if s.player1_id == player.id
                         else (s.player2_score, s.player1_score))
         recent.append({'result': 'W' if s.winner_id == player.id else 'L',
+                       'opponent_id': opponent.id if opponent else None,
                        'opponent': opponent.name if opponent else None,
                        'score': f'{_score(mine)}-{_score(theirs)}',
                        'tournament_id': s.tournament_id,
@@ -135,6 +143,7 @@ def get_player_profile(player_id):
         'tournaments_entered': len({s.tournament_id for s in sets if s.tournament_id}),
         'recent_sets': recent,
         'pr_history': _pr_history(player.id),
+        'national_rankings': _pr_history(player.id, 'national'),
     }
 
 
@@ -258,9 +267,14 @@ def get_tournament_results(tournament_id, top_n=8):
     }
 
 
-def list_pr_seasons():
-    seasons = PRSeason.objects.annotate(ranked=Count('prseasonresult')).order_by('-start_date', '-id')
-    return {'newest_first': [{'id': s.id, 'name': s.name, 'start_date': _iso(s.start_date),
+def list_pr_seasons(scope='michigan'):
+    seasons = (PRSeason.objects.select_related('region_code').annotate(ranked=Count('prseasonresult'))
+               .order_by('-start_date', '-id'))
+    if scope == 'national':
+        seasons = seasons.filter(_NATIONAL)
+    elif scope != 'all':
+        seasons = seasons.exclude(_NATIONAL)
+    return {'newest_first': [{'id': s.id, 'name': s.name, 'scope': _scope(s), 'start_date': _iso(s.start_date),
                               'end_date': _iso(s.end_date), 'is_active': s.is_active, 'ranked_players': s.ranked}
                              for s in seasons]}
 
@@ -272,7 +286,7 @@ def get_pr_rankings(season_id, limit=25):
     results = [{'rank': r.rank, 'player_id': r.player_id, 'player': r.player.name}
                for r in PRSeasonResult.objects.filter(pr_season=season).select_related('player')]
     results.sort(key=lambda r: _rank_key(r['rank']))
-    return {'season': {'id': season.id, 'name': season.name},
+    return {'season': {'id': season.id, 'name': season.name, 'scope': _scope(season)},
             'rankings': results[:_limit(limit, 25)], 'total_ranked': len(results)}
 
 
@@ -446,7 +460,7 @@ _TOOLS = {
         _schema({'query': {**_STR, 'description': 'Tag or part of a tag'}, 'limit': _INT}, ['query'])),
     'get_player_profile': (get_player_profile,
         "One player's region, main and secondary characters, overall set record, events entered, "
-        'five most recent sets and PR history. Characters are per player; sets have no character data.',
+        'five most recent sets, Michigan PR history and national rankings. Characters are per player; sets have no character data.',
         _PLAYER),
     'get_player_tournaments': (get_player_tournaments,
         "A player's placements, newest first, optionally for one year.",
@@ -466,11 +480,12 @@ _TOOLS = {
         'Details and top placements for one tournament id.',
         _schema({'tournament_id': _INT, 'top_n': _INT}, ['tournament_id'])),
     'list_pr_seasons': (list_pr_seasons,
-        'Every power-ranking season, newest first. A season with ranked_players 0 has no published '
-        'rankings yet, so look further back for the latest published ones.',
-        _schema({})),
+        'Michigan power-ranking seasons, newest first. A season with ranked_players 0 has no published '
+        'rankings yet, so look further back for the latest published ones. Pass scope "national" for '
+        'national lists such as SSBMRank, or "all" for both.',
+        _schema({'scope': {**_STR, 'enum': ['michigan', 'national', 'all']}})),
     'get_pr_rankings': (get_pr_rankings,
-        'The published ranking list for one PR season id.',
+        'The published ranking list for one season id, Michigan or national.',
         _schema({'season_id': _INT, 'limit': _INT}, ['season_id'])),
     'get_pr_shortlist': (get_pr_shortlist,
         'PR-eligible players for a season (default: the active one) with their record in PR-eligible '

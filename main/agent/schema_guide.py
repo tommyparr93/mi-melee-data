@@ -14,8 +14,8 @@ player1_score, player2_score, winner_id, winner, loser_id, loser, is_dq, pr_elig
 player_sets(set_id, tournament_id, tournament, date, round, player_id, player, opponent_id, opponent, \
 player_score, opponent_score, won, is_dq, pr_eligible)
 placements(tournament_id, tournament, date, year, in_michigan, entrants, player_id, player, placement)
-pr_seasons(season_id, season, start_date, end_date, is_active, ranked_players)
-pr_rankings(season_id, season, start_date, end_date, player_id, player, rank, rank_label)
+pr_seasons(season_id, season, start_date, end_date, is_active, ranked_players, scope)
+pr_rankings(season_id, season, start_date, end_date, player_id, player, rank, rank_label, scope)
 
 Notes:
 - player_sets has each set twice, once from each player's side. Filter on player_id and count `won` \
@@ -24,10 +24,12 @@ for records. Use sets for per-set questions.
 - player_sets.pr_eligible describes the set, not the opponent. "Against PR-eligible players" also \
 needs the opponent's players.pr_eligible, so prefer the PR head-to-head tool for that.
 - Tags are not unique and some have a suffix like "Zain (#1, SSBMRank 2025)". Filter by player_id.
+- scope is 'michigan' or 'national' (SSBMRank lists). Filter on scope = 'michigan' for any PR question \
+unless national rankings are asked about.
 - Placement 1 is the winner. Ties share a number, so "top 8" is placement <= 8.
-- pr_rankings.rank is NULL for honourable or intermediate mentions (see rank_label). A season with \
+- pr_rankings.rank is NULL for HM (honorable mention) and IM (inactive), shown in rank_label. A season with \
 ranked_players = 0 has no published rankings.
 - A PR season's events are those dated between its start_date and end_date.
-- Select player_id whenever you name players, so you can link them. Results are capped, so aggregate \
+- Select player_id whenever you name players, so the page can link them, but never show ids. Results are capped, so aggregate \
 and use ORDER BY with LIMIT.
 - If a query fails, read the error, fix the query and try once more."""

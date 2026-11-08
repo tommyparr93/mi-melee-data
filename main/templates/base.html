@@ -44,9 +44,11 @@
     <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'journey' %}">Journey</a>
     </li>
+    {% if user.is_superuser %}
     <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'ask_tom' %}">Ask Tom</a>
     </li>
+    {% endif %}
      <li class="btn-group dropdown">
         <a href="/admin" type="button" class="btn btn-danger">
           Admin

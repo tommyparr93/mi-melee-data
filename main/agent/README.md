@@ -1,6 +1,6 @@
 # Ask Tom
 
-A chat page at `/ask-tom/` that answers questions about the site's Michigan Melee data. It runs locally for now and is not deployed.
+A chat page at `/ask-tom/` that answers questions about the site's Michigan Melee data. It runs locally for now and is not deployed. Only superusers can see the page or nav link, or use the bot.
 
 ## Setup
 
@@ -36,7 +36,7 @@ Every limit is an environment variable, set low by default.
 | `AGENT_CLAUDE_EFFORT` | `low` | How hard the model thinks. Higher costs more. |
 | `ASK_TOM_DAILY_BUDGET_USD` | `0.50` | Global daily spend, reset at midnight UTC. |
 | `ASK_TOM_RATE_PER_MINUTE` | `5` | Per IP and per session. |
-| `ASK_TOM_MESSAGES_PER_DAY` | `30` | Per IP and per session, over a rolling 24 hours. |
+| `ASK_TOM_MESSAGES_PER_DAY` | `50` | Per IP and per session, over a rolling 24 hours. |
 | `ASK_TOM_TURNS_PER_CONVERSATION` | `12` | Then the visitor starts a new chat. |
 | `ASK_TOM_MAX_INPUT_CHARS` | `500` | Longest question. |
 | `ASK_TOM_HISTORY_MESSAGES` | `6` | Earlier messages sent to the model. |
@@ -57,6 +57,8 @@ python manage.py agent_budget
 If the account runs out of credit, the bot stops calling the API for the rest of the UTC day. After topping up, run `python manage.py agent_budget --clear-credit-flag`.
 
 Every question is stored in `agent_turn` with its tools, tokens, cost and outcome. IPs and sessions are hashed. Questions are stored in full, so clear that table on whatever schedule suits you.
+
+Each answer has a **Report this answer** button with an optional note. Reports are saved on that answer's `agent_turn` row. To review them, open Agent turns in Django admin and filter on Reported at. They make good new eval questions.
 
 ## Running the eval
 
@@ -83,6 +85,8 @@ python manage.py eval_agent --model claude-haiku-5-5 --model claude-sonnet-5-5 -
 The prompt still says user text and database text are untrusted, but the design assumes that sometimes fails. The worst outcome of a successful injection is a wrong sentence in one reply.
 
 **Grounding.** "Never invent stats" is enforced by giving the model the data and telling it to look things up, then tested by the eval's no-data cases. A prompt alone cannot guarantee it, which is why the page says answers can be wrong.
+
+**Links are added by code.** The model linked some names and missed others, and asking it more firmly wouldn't make that reliable. Tool results already pair each name with its id, so `links.py` adds the links afterwards. If a job is mechanical and the data is on hand, do it in code and save the model for judgment.
 
 **Budget holds before spending.** A check that only compares the total so far lets ten simultaneous requests all pass and overshoot together. So each model call first holds its worst-case cost inside a database lock, and swaps that for the real cost afterwards. It's in the database because the site runs several server processes, which wouldn't share memory.
 
