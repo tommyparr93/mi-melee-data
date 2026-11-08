@@ -1,70 +1,60 @@
 {% extends 'base.html' %}
 {% block title %}Tournament List{% endblock %}
+{% block extra_head %}<meta name="viewport" content="width=device-width, initial-scale=1">{% endblock %}
 {% block content %}
-  <h1>Tournaments</h1>
-    <form method="get" style="float: right" id="filter-form">
-        <select name="pr_season" id="pr_season">
-        <option value="">All Seasons</option>
-        {% for pr_season in pr_seasons %}
-        <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>
-            {{ pr_season.name }}
-        </option>
-        {% endfor %}
+<div class="container mt-4">
+    <h2 class="mb-3">Tournaments</h2>
+
+    <form method="get" action="{% url 'tournaments' %}" class="d-flex flex-wrap align-items-center mb-3" style="gap: 8px;">
+        <input type="search" name="q" value="{{ request.GET.q }}" class="form-control" style="max-width: 320px;" placeholder="Search by name or city" aria-label="Search tournaments">
+        <select name="pr_season" class="form-control" style="max-width: 260px;" aria-label="PR season" onchange="this.form.submit()">
+            <option value="">All seasons</option>
+            {% for pr_season in pr_seasons %}
+            <option value="{{ pr_season.id }}" {% if request.GET.pr_season == pr_season.id|stringformat:"s" %}selected{% endif %}>{{ pr_season.name }}</option>
+            {% endfor %}
         </select>
-            <input type="submit" value="Filter">
+        {% if request.GET.sort %}<input type="hidden" name="sort" value="{{ request.GET.sort }}">{% endif %}
+        <button type="submit" class="btn btn-primary">Search</button>
+        {% if has_filters %}<a href="{% url 'tournaments' %}" class="btn btn-link">Clear</a>{% endif %}
+        <span class="text-muted ml-auto ms-auto">{{ page_obj.paginator.count }} tournament{{ page_obj.paginator.count|pluralize }}</span>
     </form>
-    <form method="get" action="{% url 'tournaments' %}">
-                <input type="text" name="q" placeholder="Search tournaments">
-                <button type="submit">Search</button>
-          </form>
-  <table>
-    <thead>
-      <tr>
-          <th>Tournament</th>
-          <th>Date</th>
-          <th>Winner</th>
-          <th>Entrants</th>
 
-      </tr>
-    </thead>
-    <tbody>
-      {% for tournament in page_obj %}
-        <tr>
-            <td><a href="{% url 'tournament_details' pk=tournament.pk %}">{{ tournament.name }}</a></td>
-            <td>{{ tournament.date }}</td>
-                        <td>             {% if tournament.winner and tournament.winner.id %}
-                <a href="{% url 'player_detail' pk=tournament.winner.id %}">{{ tournament.winner }}</a>
-            {% else %}
-                 {{ tournament.winner }} <!-- or some default value or text -->
-            {% endif %}</td>
-            <td>{{ tournament.entrant_count }}</td>
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th><a href="{{ sort_links.date.url }}" class="text-white text-decoration-none">Date {{ sort_links.date.arrow }}</a></th>
+                        <th><a href="{{ sort_links.name.url }}" class="text-white text-decoration-none">Tournament {{ sort_links.name.arrow }}</a></th>
+                        <th class="d-none d-md-table-cell"><a href="{{ sort_links.city.url }}" class="text-white text-decoration-none">City {{ sort_links.city.arrow }}</a></th>
+                        <th class="text-end text-right"><a href="{{ sort_links.entrants.url }}" class="text-white text-decoration-none">Entrants {{ sort_links.entrants.arrow }}</a></th>
+                        <th>Winner</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for tournament in page_obj %}
+                    <tr>
+                        <td class="text-nowrap">{{ tournament.date|date:"M j, Y" }}</td>
+                        <td><a href="{% url 'tournament_details' pk=tournament.pk %}" class="fw-bold text-decoration-none">{{ tournament.name }}</a></td>
+                        <td class="d-none d-md-table-cell">{{ tournament.city|default:"" }}</td>
+                        <td class="text-end text-right">{{ tournament.entrant_count|default_if_none:"" }}</td>
+                        <td>
+                            {% if tournament.winners %}
+                                {% with winner=tournament.winners.0 %}<a href="{% url 'player_detail' pk=winner.id %}" class="text-decoration-none">{{ winner.name }}</a>{% endwith %}
+                                {% if tournament.extra_winner_count %}<small class="text-muted">+{{ tournament.extra_winner_count }}</small>{% endif %}
+                            {% else %}
+                                <span class="text-muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr><td colspan="5" class="text-center text-muted py-4">No tournaments match your search.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-
-  <div class="pagination">
-    <span class="step-links">
-        {% if page_obj.has_previous %}
-            <a href="?page=1">&laquo; first</a>
-            <a href="?page={{ page_obj.previous_page_number }}&pr_season={{pr_season}}">previous</a>
-        {% endif %}
-
-        <span class="current-page">
-            Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}.
-        </span>
-
-        {% if page_obj.has_next %}
-            <a href="?page={{ page_obj.next_page_number }}&pr_season={{ request.GET.pr_season }}&q={{ request.GET.search }}">next</a>
-            <a href="?page={{ page_obj.paginator.num_pages }}&pr_season={{ request.GET.pr_season }}&q={{ request.GET.search }}">last &raquo;</a>
-        {% endif %}
-    </span>
-  </div>
+    {% include 'main/partials/tournament_pagination.html' %}
+</div>
 {% endblock %}
-
-<script type="text/javascript">
-    document.getElementById('pr_season').addEventListener('change', function() {
-        this.form.submit();
-    });
-</script>

@@ -50,6 +50,9 @@
                         {% if player.pr_notable %}
                             <span class="badge rounded-pill bg-primary px-3 py-2">Notable Player</span>
                         {% endif %}
+                        {% if player.startgg_url %}
+                            <a href="{{ player.startgg_url }}" target="_blank" rel="noopener" class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2 text-decoration-none">View on start.gg</a>
+                        {% endif %}
                     </div>
 
                     {% if player.main_account %}
