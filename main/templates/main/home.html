@@ -89,7 +89,7 @@
                 <tbody>
                     {% for tournament in recent_tournaments %}
                     <tr>
-                        <td><strong>{{ tournament.name }}</strong></td>
+                        <td><a href="{% url 'tournament_details' tournament.pk %}" class="text-decoration-none"><strong>{{ tournament.name }}</strong></a></td>
                         <td>{{ tournament.date }}</td>
                         <td>{{ tournament.city|default:"-" }}</td>
                         <td>{{ tournament.entrant_count }}</td>

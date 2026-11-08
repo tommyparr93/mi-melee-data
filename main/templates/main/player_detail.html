@@ -91,9 +91,11 @@
                             {% if player.startgg_url %}
                                 <a href="{{ player.startgg_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">View on start.gg</a>
                             {% endif %}
+                            {% if user.is_superuser %}
                             <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-link btn-sm text-muted text-decoration-none">
                                 <i class="bi bi-pencil-square"></i> Edit Profile
                             </a>
+                            {% endif %}
                         </div>
                     </div>
                 </div>

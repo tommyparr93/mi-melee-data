@@ -1247,10 +1247,24 @@ class NationalSeasonIsolationTests(TestCase):
         standing = [(s['heading'], s['rank'], s['season']) for s in _player_pr_standing(self.player)]
         self.assertEqual(standing, [
             ('Current MI PR', '#5', '2025 MI'),
-            ('Current National', '#20', 'SSBMRank 2025'),
+            ('Current & Highest National', '#20', 'SSBMRank 2025'),
             ('Highest MI PR', '#2', '2024 MI'),
-            ('Highest National', '#20', 'SSBMRank 2025'),
         ])
+
+    def test_only_michigan_tiles_link_to_their_season(self):
+        tiles = {s['heading']: s['url'] for s in _player_pr_standing(self.player)}
+        self.assertEqual(tiles['Current & Highest MI PR'], f'/pr_season/{self.mi.pk}')
+        self.assertIsNone(tiles['Current & Highest National'])
+
+    def test_edit_profile_is_for_admins_only(self):
+        url = reverse('player_detail', args=[self.player.id])
+        edit_link = reverse('admin:main_player_change', args=[self.player.id])
+        with _mock.patch('main.views.TournamentResults'):
+            public = self.client.get(url)
+            self.client.force_login(_get_user_model().objects.create_superuser('boss', password='x'))
+            admin = self.client.get(url)
+        self.assertNotContains(public, edit_link)
+        self.assertContains(admin, edit_link)
 
     def test_not_on_the_latest_list_means_no_current_tile(self):
         newer = PRSeason.objects.create(name='2026 MI', region_code_id=MICHIGAN_REGION_CODE,
@@ -1264,6 +1278,14 @@ class NationalSeasonIsolationTests(TestCase):
         PRSeasonResult.objects.create(pr_season=self.mi, player=self.other, rank='IM')
         standing = [(s['heading'], s['rank']) for s in _player_pr_standing(self.other)]
         self.assertEqual(standing, [('Current MI PR', 'IM')])
+
+    def test_tied_rank_on_an_older_list_keeps_the_newest_as_highest(self):
+        older = PRSeason.objects.create(name='2024 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                        start_date=_dt.date(2024, 1, 1))
+        PRSeasonResult.objects.create(pr_season=older, player=self.player, rank='5')
+        headings = [s['heading'] for s in _player_pr_standing(self.player)]
+        self.assertEqual(headings.count('Current & Highest MI PR'), 1)
+        self.assertNotIn('Highest MI PR', headings)
 
     def test_merge_moves_ranking_rows_and_keeps_main_accounts_placement(self):
         duplicate = Player.objects.create(name='Ossify')

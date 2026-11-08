@@ -36,22 +36,19 @@
       <a class="nav-link link-light" href="{% if current_mi_pr_season %}{% url 'pr_season_details' current_mi_pr_season.id %}{% else %}{% url 'pr_season_details' 2 %}{% endif %}">Current MI PR</a>
     </li>
     <li class="nav-item">
-      <a class="nav-link link-light" href="{% url 'pr_table' %}">PR H2H Table</a>
-    </li>
-    <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'analytics' %}">Analytics</a>
     </li>
     <li class="nav-item">
       <a class="nav-link link-light" href="{% url 'journey' %}">Journey</a>
     </li>
-     <li class="btn-group dropdown">
+     <li class="btn-group dropdown ms-auto ml-auto">
         <a href="/admin" type="button" class="btn btn-danger">
           Admin
         </a>
        <button type="button" class="btn btn-danger dropdown-toggle" data-bs-toggle="dropdown"></button>
        {% if user.is_superuser %}
 
-        <ul class="dropdown-menu">
+        <ul class="dropdown-menu dropdown-menu-end dropdown-menu-right">
           <li><a class="dropdown-item" href="{% url 'tournament_form' %}">Tournament Form</a></li>
           <li><a class="dropdown-item" href="{% url 'join_duplicate' %}">Duplicate Account Tool</a></li>
           <li><a class="dropdown-item" href="{% url 'pr_season_list' %}">PR Seasons</a></li>

@@ -1139,7 +1139,9 @@ def _highest_pr_placement(results):
 
 def _player_pr_standing(player):
     """The player page's PR summary: placements on the latest completed Michigan
-    and national lists, then the highest placement ever on each."""
+    and national lists, then the highest placement ever on each. When the current
+    placement is also the highest, the two become one tile. Michigan tiles link to
+    their season page."""
     completed = _completed_pr_results()
     results = list(completed.filter(player=player))
     current, highest = [], []
@@ -1150,13 +1152,20 @@ def _player_pr_standing(player):
             continue
         newest = completed.filter(pr_season__region_code_id=region).last()
         on_newest = next((r for r in placed if r.pr_season_id == newest.pr_season_id), None)
-        if on_newest:
-            current.append({'heading': f'Current {name}', 'rank': _pr_rank_label(on_newest.rank),
-                            'season': on_newest.pr_season.name, 'is_michigan': is_michigan})
         best = _highest_pr_placement(placed)
+
+        def tile(heading, result):
+            return {'heading': heading, 'rank': _pr_rank_label(result.rank),
+                    'season': result.pr_season.name, 'is_michigan': is_michigan,
+                    'url': reverse('pr_season_details', args=[result.pr_season_id]) if is_michigan else None}
+
+        if on_newest and best and on_newest.pk == best.pk:
+            current.append(tile(f'Current & Highest {name}', on_newest))
+            continue
+        if on_newest:
+            current.append(tile(f'Current {name}', on_newest))
         if best:
-            highest.append({'heading': f'Highest {name}', 'rank': _pr_rank_label(best.rank),
-                            'season': best.pr_season.name, 'is_michigan': is_michigan})
+            highest.append(tile(f'Highest {name}', best))
     return current + highest
 
 
