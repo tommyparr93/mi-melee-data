@@ -1,0 +1,8 @@
+# Tag on a published list -> Player.id, for tags the import can't settle itself.
+# A blank player_id keeps the tag unmatched. Lines starting with # are ignored.
+tag,player_id
+Chickenman400,65777
+bobby big ballz,65777
+Eggy,754351
+The Weapon,7612
+Ultra,2078335

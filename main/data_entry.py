@@ -7,7 +7,7 @@ import re
 
 import requests
 
-from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
+from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult, MICHIGAN_REGION_CODE
 from django.db import models
 from django.http import HttpResponseRedirect
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -53,6 +53,35 @@ def fetch_startgg_location(token, event_id):
         return {}
 
 
+def fetch_player_slugs(token, player_ids):
+    """Start.gg profile slugs for up to 50 player ids, as {player_id: slug}.
+
+    Players with no linked start.gg account are left out. Returns None if the request fails.
+    """
+    query = 'query { ' + ' '.join(
+        f'p{int(player_id)}: player(id: {int(player_id)}) {{ user {{ slug }} }}' for player_id in player_ids
+    ) + ' }'
+    try:
+        resp = requests.post(
+            STARTGG_ENDPOINT,
+            json={'query': query},
+            headers={'Authorization': f'Bearer {token}', 'Content-Type': 'application/json'},
+            timeout=30,
+        )
+        data = resp.json().get('data') if resp.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        return None
+    if data is None:
+        return None
+
+    slugs = {}
+    for player_id in player_ids:
+        user = (data.get(f'p{int(player_id)}') or {}).get('user') or {}
+        if user.get('slug'):
+            slugs[player_id] = user['slug'].removeprefix('user/')[:64]
+    return slugs
+
+
 def extract_url_values(url):
     # Support both /event/ and /events/ and handle potential doubling or full URLs
     pattern = r"tournament/(?P<tournament_slug>[^/]+)/events?/(?P<event_name>[^/?#]+)"
@@ -81,6 +110,14 @@ def exists(model: models.Model, pk) -> bool:
 
     entries = model.objects.filter(id=pk)
     return True if entries else False
+
+
+def michigan_season_for_date(date):
+    """The Michigan PR season covering a date. National and other regional lists
+    also have date ranges, but tournaments never belong to them."""
+    return PRSeason.objects.filter(
+        start_date__lte=date, end_date__gte=date, region_code_id=MICHIGAN_REGION_CODE,
+    ).first()
 
 
 def enter_pr_csv(pr_csv: InMemoryUploadedFile, pr_season: PRSeason):
@@ -145,10 +182,12 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
 
     events = smash.tournament_show_events(tournament_slug)
     event_id = 0
+    event_entrants = None
     if events:
         for event in events:
             if event['slug'] == event_name:
                 event_id = event['id']
+                event_entrants = event.get('entrants')
                 break
                 
     if event_id == 0:
@@ -249,7 +288,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
     # Database Transaction
     print(f"Opening database transaction for {tournament_slug}...")
     with transaction.atomic():
-        pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
+        pr_season = michigan_season_for_date(t_date)
         
         # Create tournament
         Tournament.objects.create(
@@ -258,7 +297,8 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
             date=t_date,
             city=t_city,
             state=t_state,
-            entrant_count=t_entrants,
+            # t_entrants counts everyone at the tournament, including other games.
+            entrant_count=event_entrants or t_entrants,
             pr_season=pr_season,
             slug=tournament_slug,
             region_code_id=region_id,
@@ -287,6 +327,14 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
                 sql_query = 'INSERT INTO tournament_results (tournament_id, player_id, placement) VALUES (%s, %s, %s) ON CONFLICT DO NOTHING'
                 query_parameters = (event_id, player_id, placement)
                 cur.execute(sql_query, query_parameters)
+
+    # Best effort, after the import has saved: a miss is picked up by backfill_player_slugs.
+    new_player_ids = [player.id for player in players_to_create]
+    for start in range(0, len(new_player_ids), 50):
+        time.sleep(1)  # API rate limit
+        slugs = fetch_player_slugs(smashggToken, new_player_ids[start:start + 50]) or {}
+        for player_id, slug in slugs.items():
+            Player.objects.filter(id=player_id).update(startgg_slug=slug)
 
     return redirect(reverse('tournament_details', kwargs={'pk': event_id}))
 

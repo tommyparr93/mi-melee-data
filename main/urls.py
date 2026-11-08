@@ -10,6 +10,7 @@ urlpatterns = [
     path('player/<int:pk>/', views.PlayerDetailView.as_view(), name='player_detail'),
     path('tournaments', views.TournamentListView.as_view(), name='tournaments'),
     path('tournaments/<int:pk>', views.TournamentDetailView.as_view(), name='tournament_details'),
+    path('tournaments/<int:pk>/players/<int:player_id>/sets', views.tournament_player_sets, name='tournament_player_sets'),
     path('regions', views.PlayerListView.as_view(), name='regions'),
     path('tournament_form', views.put_tournament, name='tournament_form'),
     path('pr_season/<int:pk>', views.PrSeasonDetailView.as_view(), name='pr_season_details'),

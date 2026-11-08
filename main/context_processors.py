@@ -1,8 +1,6 @@
 from django.db.models import F
 
-from .models import PRSeason
-
-MICHIGAN_REGION_CODE = 7
+from .models import PRSeason, MICHIGAN_REGION_CODE
 
 
 def active_pr_instance(request):

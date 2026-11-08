@@ -1,3 +1,4 @@
+{% load pr_badges %}
   <table class="table table-light">
     <thead>
       <tr>
@@ -11,8 +12,9 @@
         <tr>
         <td>
             <a href="{% url 'player_detail' pk=player.pk %}{% if pr_season %}?pr_view=on?&pr_season={{ pr_season }}{% endif %}">
-                {{ player.name }}
+                {{ player.name|clean_tag }}
             </a>
+            {% pr_badges player %}
         </td>
         <td>
             {% if player.main_char %}

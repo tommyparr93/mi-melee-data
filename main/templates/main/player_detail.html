@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load pr_badges %}
 {% block title %} {{ player.name }} Player Details{% endblock %}
 {% block content %}
 <style>
@@ -25,15 +26,12 @@
             <div class="row align-items-center">
                 <div class="col-md-8">
                     <div class="d-flex align-items-center mb-1 flex-wrap">
-                        <h1 class="display-5 fw-bold mb-0 me-3 text-dark">{{ player.name }}</h1>
-                        {% if calculations.pr_rank.rank %}
-                            <span class="badge bg-warning text-dark shadow-sm">#{{ calculations.pr_rank.rank }} in MI</span>
-                        {% endif %}
+                        <h1 class="display-5 fw-bold mb-0 me-3 text-dark">{{ player.name|clean_tag }}</h1>
                     </div>
                     
                     <div class="d-flex flex-wrap gap-2 mb-3 mt-3">
                         {% if player.region_code %}
-                            <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2">
+                            <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2 d-flex align-items-center">
                                 <i class="bi bi-geo-alt-fill me-1"></i> {{ player.region_code.name }}
                             </span>
                         {% endif %}
@@ -48,9 +46,11 @@
                             </span>
                         {% endif %}
                         {% if player.pr_notable %}
-                            <span class="badge rounded-pill bg-primary px-3 py-2">Notable Player</span>
+                            <span class="badge rounded-pill bg-primary px-3 py-2 d-flex align-items-center">Notable Player</span>
                         {% endif %}
                     </div>
+
+                    {% include 'main/partials/player_pr_standing.html' %}
 
                     {% if player.main_account %}
                         <div class="mt-2 p-2 bg-light rounded d-inline-block border">
@@ -87,9 +87,16 @@
                                 <input type="hidden" name="tab" id="current-tab-input" value="{{ request.GET.tab|default:'h2h' }}">
                             </form>
                         </div>
-                        <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-link btn-sm text-muted text-decoration-none">
-                            <i class="bi bi-pencil-square"></i> Edit Profile
-                        </a>
+                        <div class="d-flex justify-content-md-end align-items-center gap-2">
+                            {% if player.startgg_url %}
+                                <a href="{{ player.startgg_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-primary">View on start.gg</a>
+                            {% endif %}
+                            {% if user.is_superuser %}
+                            <a href="{% url 'admin:main_player_change' player.id %}" class="btn btn-link btn-sm text-muted text-decoration-none">
+                                <i class="bi bi-pencil-square"></i> Edit Profile
+                            </a>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </div>

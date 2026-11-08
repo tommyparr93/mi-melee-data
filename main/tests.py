@@ -475,7 +475,8 @@ class PublicPrSeasonPageOrderTests(TestCase):
     is a text column, so it must sort 1, 2 ... 10, then HM, then IM."""
 
     def test_members_are_sorted_numerically_then_hm_then_im(self):
-        season = PRSeason.objects.create(name='Order Test')
+        _Region.objects.create(id=7, name='Michigan')
+        season = PRSeason.objects.create(name='Order Test', region_code_id=7)
         for i, rank in enumerate(['IM', '10', 'HM', '2', '1', '11']):
             PRSeasonResult.objects.create(
                 pr_season=season, player=Player.objects.create(name=f'P{i}'), rank=rank)
@@ -578,7 +579,7 @@ class SeasonPageContextTests(TestCase):
 
     def test_page_renders_for_a_season_and_for_an_empty_one(self):
         self.assertEqual(self.client.get(f'/pr_season/{self.cur.pk}').status_code, 200)
-        empty = PRSeason.objects.create(name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30))
+        empty = PRSeason.objects.create(name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30), region_code_id=7)
         resp = self.client.get(f'/pr_season/{empty.pk}')
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "haven't been published yet")
@@ -920,3 +921,679 @@ class SeasonVideoTests(TestCase):
             resp = self._admin_post(SimpleUploadedFile('clip.mp4', _MP4_BYTES, content_type='video/mp4'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'over 150 MB')
+
+
+class AdminToolAccessTests(TestCase):
+    """The tournament importer and duplicate merge change live data, so the
+    server must refuse them. The menu only hiding their links is not enough."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser('tooladmin', 't@x.com', 'pw')
+        self.plain = User.objects.create_user('toolplain', 'tp@x.com', 'pw')
+        self.main_player = Player.objects.create(id=9001, name='Main')
+        self.duplicate = Player.objects.create(id=9002, name='Alt')
+
+    def _assert_sent_to_login(self, resp):
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp['Location'].startswith('/admin/login/'))
+
+    def _post_import(self, **extra):
+        return self.client.post(reverse('tournament_form'), {
+            'tournament_url': 'https://www.start.gg/tournament/x/event/y',
+            'is_pr_eligible': 'on',
+            **extra,
+        })
+
+    def _post_merge(self):
+        session = self.client.session
+        session['main_account'] = str(self.main_player.id)
+        session['duplicate_account'] = str(self.duplicate.id)
+        session.save()
+        return self.client.post(reverse('join_duplicate'), {
+            'confirm_merge': 'on',
+        })
+
+    def test_forms_refuse_anonymous_and_non_superuser_gets(self):
+        for name in ('tournament_form', 'join_duplicate'):
+            with self.subTest(view=name, user='anonymous'):
+                self._assert_sent_to_login(self.client.get(reverse(name)))
+        self.client.force_login(self.plain)
+        for name in ('tournament_form', 'join_duplicate'):
+            with self.subTest(view=name, user='plain'):
+                self._assert_sent_to_login(self.client.get(reverse(name)))
+
+    def test_import_refused_without_superuser(self):
+        with _mock.patch('main.views.enter_tournament') as sync_import, \
+                _mock.patch('main.views.threading.Thread') as background:
+            self._assert_sent_to_login(self._post_import())
+            self._assert_sent_to_login(self._post_import(run_in_background='on'))
+            self.client.force_login(self.plain)
+            self._assert_sent_to_login(self._post_import())
+            self._assert_sent_to_login(self._post_import(run_in_background='on'))
+        sync_import.assert_not_called()
+        background.assert_not_called()
+
+    def test_merge_refused_without_superuser(self):
+        with _mock.patch('main.views.merge_accounts') as merge:
+            self._assert_sent_to_login(self._post_merge())
+            self.client.force_login(self.plain)
+            self._assert_sent_to_login(self._post_merge())
+        merge.assert_not_called()
+        self.assertTrue(Player.objects.filter(id=self.duplicate.id).exists())
+
+    def test_superuser_can_use_both_tools(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(reverse('tournament_form')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('join_duplicate')).status_code, 200)
+        with _mock.patch('main.views.enter_tournament',
+                         return_value=HttpResponse('ok')) as sync_import:
+            self.assertEqual(self._post_import().status_code, 200)
+        sync_import.assert_called_once()
+        with _mock.patch('main.views.merge_accounts') as merge:
+            self.assertEqual(self._post_merge().status_code, 200)
+        merge.assert_called_once_with(
+            str(self.main_player.id), str(self.duplicate.id))
+
+
+from django.contrib.auth import get_user_model as _get_user_model
+from django.core.exceptions import ValidationError as _ValidationError
+from django.template import Template, Context
+from django.core.management.base import CommandError as _CommandError
+from main.models import RankingListEntry, NATIONAL_REGION_CODE, MICHIGAN_REGION_CODE
+from main.data_entry import michigan_season_for_date
+from main.views import merge_accounts, _player_pr_standing
+from main.templatetags.pr_badges import build_badge_map
+from main.management.commands.import_pr_season import parse_wiki_rows, parse_wiki_period
+
+
+WIKI_PAGE = """{{Infobox Ranking
+|period         = December 16th, 2024 - December 14th, 2025
+|region         = Global
+}}
+{{PowerRankingsRow| 1|Zain                | 1|{{Head|Marth|g=SSBM|s=20px}}|USA|score=100}}
+{{PowerRankingsRow| 2|Ossify              | 7|{{Head|Fox|g=SSBM|s=20px}}|USA|score=99.21}}
+{{PowerRankingsRow|3|Blue             |66| {{head|Fox|g=SSBM|s=20px}}|USA|location=Indiana|score=&mdash;}}
+{{PowerRankingsRow|4|Twin|5|{{Head|Fox}}|USA|score=50}}
+{{PowerRankingsRow|5|[[Smasher:Fresh|Fresh]]|-|{{Head|Fox}}|USA|score=49}}
+"""
+
+
+class WikiParsingTests(SimpleTestCase):
+    def test_reads_rank_tag_previous_and_score(self):
+        rows = parse_wiki_rows(WIKI_PAGE)
+        self.assertEqual([r['tag'] for r in rows], ['Zain', 'Ossify', 'Blue', 'Twin', 'Fresh'])
+        self.assertEqual(rows[1]['rank'], '2')
+        self.assertEqual(rows[1]['previous_rank'], '7')
+        self.assertEqual(rows[1]['score'], 99.21)
+
+    def test_non_numeric_score_is_empty_and_raw_row_is_kept(self):
+        row = parse_wiki_rows(WIKI_PAGE)[2]
+        self.assertIsNone(row['score'])
+        self.assertIn('location=Indiana', row['raw_row'])
+
+    def test_period(self):
+        self.assertEqual(parse_wiki_period(WIKI_PAGE),
+                         (_dt.date(2024, 12, 16), _dt.date(2025, 12, 14)))
+
+
+class ImportPrSeasonTests(TestCase):
+    def setUp(self):
+        _Region.objects.create(id=NATIONAL_REGION_CODE, name='National')
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        self.zain = Player.objects.create(name='Zain (#1, SSBMRank 2025)')
+        self.zain_alt = Player.objects.create(name='Zain')
+        self.ossify = Player.objects.create(name='Ossify (#2, SSBM Rank 2025)')
+        self.twin_a = Player.objects.create(name='Twin')
+        self.twin_b = Player.objects.create(name='Twin')
+
+    def run_import(self, *extra, name='SSBMRank 2025', region='National', page=WIKI_PAGE):
+        out = _StringIO()
+        with _mock.patch('main.management.commands.import_pr_season.fetch_wikitext', return_value=page):
+            _call_command('import_pr_season', '--region', region, '--name', name,
+                          '--wiki-page', 'SSBMRank_2025', *extra, stdout=out)
+        return out.getvalue()
+
+    def overrides_file(self, text):
+        handle = _tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, encoding='utf-8')
+        handle.write(text)
+        handle.close()
+        self.addCleanup(_os.unlink, handle.name)
+        return handle.name
+
+    def test_dry_run_writes_nothing_and_reports_problems(self):
+        output = self.run_import('--dry-run')
+        self.assertFalse(PRSeason.objects.filter(name='SSBMRank 2025').exists())
+        self.assertFalse(RankingListEntry.objects.exists())
+        self.assertIn('Ambiguous', output)
+        self.assertIn('Not found', output)
+
+    def test_every_row_is_stored_but_only_matches_get_results(self):
+        self.run_import()
+        season = PRSeason.objects.get(name='SSBMRank 2025')
+        self.assertEqual(season.region_code_id, NATIONAL_REGION_CODE)
+        self.assertFalse(season.is_active)
+        self.assertEqual(season.start_date, _dt.date(2024, 12, 16))
+        self.assertEqual(RankingListEntry.objects.filter(pr_season=season).count(), 5)
+        self.assertEqual(
+            set(PRSeasonResult.objects.filter(pr_season=season).values_list('player_id', 'rank')),
+            {(self.zain.id, '1'), (self.ossify.id, '2')})
+        self.assertIsNone(RankingListEntry.objects.get(source_tag='Blue').player_id)
+        self.assertIsNone(RankingListEntry.objects.get(source_tag='Twin').player_id)
+
+    def test_duplicate_accounts_resolve_to_the_annotated_one(self):
+        self.run_import()
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Zain').player_id, self.zain.id)
+
+    def test_rerun_is_idempotent(self):
+        self.run_import()
+        self.run_import()
+        self.assertEqual(RankingListEntry.objects.count(), 5)
+        self.assertEqual(PRSeasonResult.objects.count(), 2)
+        self.assertEqual(PRSeason.objects.filter(name='SSBMRank 2025').count(), 1)
+
+    def test_override_settles_ambiguous_tag_on_rerun(self):
+        self.run_import()
+        path = self.overrides_file(f'tag,player_id\nTwin,{self.twin_b.id}\n')
+        self.run_import('--overrides', path)
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Twin').player_id, self.twin_b.id)
+        self.assertTrue(PRSeasonResult.objects.filter(player=self.twin_b, rank='4').exists())
+
+    def test_override_for_unknown_player_is_refused(self):
+        path = self.overrides_file('tag,player_id\nTwin,999999\n')
+        with self.assertRaises(_CommandError):
+            self.run_import('--overrides', path)
+
+    def test_existing_result_is_never_overwritten(self):
+        self.run_import()
+        PRSeasonResult.objects.filter(player=self.ossify).update(rank='9')
+        self.assertIn('Left as is', self.run_import())
+        self.assertEqual(PRSeasonResult.objects.get(player=self.ossify).rank, '9')
+
+    def test_regionless_season_is_reused_and_dates_kept_unless_asked(self):
+        season = PRSeason.objects.create(name='SSBMRank 2025', start_date=_dt.date(2023, 8, 8),
+                                         end_date=_dt.date(2023, 8, 8))
+        self.run_import()
+        season.refresh_from_db()
+        self.assertEqual(season.region_code_id, NATIONAL_REGION_CODE)
+        self.assertEqual(season.start_date, _dt.date(2023, 8, 8))
+        self.run_import('--update-dates')
+        season.refresh_from_db()
+        self.assertEqual(season.end_date, _dt.date(2025, 12, 14))
+
+    def test_season_in_another_region_is_refused(self):
+        PRSeason.objects.create(name='SSBMRank 2025', region_code_id=MICHIGAN_REGION_CODE)
+        with self.assertRaises(_CommandError):
+            self.run_import()
+
+    def test_csv_source_works_for_a_regional_season(self):
+        _Region.objects.create(id=50, name='Indiana')
+        path = self.overrides_file('rank,tag,score\n1,Ossify,10\nHM,Nobody,\n')
+        _call_command('import_pr_season', '--region', 'Indiana', '--name', 'Indiana Spring',
+                      '--csv', path, '--start', '2025-01-01', '--end', '2025-04-30', stdout=_StringIO())
+        season = PRSeason.objects.get(name='Indiana Spring')
+        self.assertEqual(season.region_code_id, 50)
+        self.assertEqual(RankingListEntry.objects.filter(pr_season=season).count(), 2)
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=season).player_id, self.ossify.id)
+
+
+class NationalSeasonIsolationTests(TestCase):
+    """National lists live in pr_season but must not affect anything Michigan."""
+
+    def setUp(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=NATIONAL_REGION_CODE, name='National')
+        self.mi = PRSeason.objects.create(
+            name='2025 MI', region_code_id=MICHIGAN_REGION_CODE,
+            start_date=_dt.date(2025, 1, 1), end_date=_dt.date(2025, 6, 30))
+        self.national = PRSeason.objects.create(
+            name='SSBMRank 2025', region_code_id=NATIONAL_REGION_CODE,
+            start_date=_dt.date(2024, 12, 16), end_date=_dt.date(2025, 12, 14))
+        self.summer = PRSeason.objects.create(
+            name='SSBMRank Summer 2026', region_code_id=NATIONAL_REGION_CODE,
+            start_date=_dt.date(2025, 12, 15), end_date=_dt.date(2026, 7, 12))
+        self.player = Player.objects.create(name='Ossify (#20, SSBM Rank 2025)')
+        self.other = Player.objects.create(name='Rival')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=self.player, rank='5')
+        PRSeasonResult.objects.create(pr_season=self.national, player=self.player, rank='20')
+        PRSeasonResult.objects.create(pr_season=self.summer, player=self.player, rank='11')
+
+    def test_new_tournaments_only_land_in_michigan_seasons(self):
+        self.assertEqual(michigan_season_for_date(_dt.date(2025, 3, 1)), self.mi)
+        self.assertIsNone(michigan_season_for_date(_dt.date(2025, 10, 1)))
+
+    def test_public_page_404s_for_national(self):
+        self.assertEqual(self.client.get(f'/pr_season/{self.national.pk}').status_code, 404)
+        self.assertEqual(self.client.get(f'/pr_season/{self.mi.pk}').status_code, 200)
+
+    def test_season_management_list_leaves_national_out(self):
+        admin = _get_user_model().objects.create_superuser('boss', password='x')
+        self.client.force_login(admin)
+        PRSeason.objects.create(name='Indiana', region_code_id=None)
+        for view, expected in (('mi', {'2025 MI'}), ('other', {'Indiana'})):
+            resp = self.client.get(reverse('pr_season_list'), {'view': view})
+            self.assertEqual({s.name for s in resp.context['seasons']}, expected)
+
+    def test_player_pr_history_is_michigan_only(self):
+        seasons, summary = _journey_pr_history(self.player)
+        self.assertEqual([s['name'] for s in seasons], ['2025 MI'])
+        self.assertEqual(summary['appearances'], 1)
+
+    def test_analytics_h2h_ranks_are_michigan_only(self):
+        resp = self.client.get(reverse('analytics_h2h'), {'p1': self.player.id, 'p2': self.other.id})
+        self.assertEqual(resp.context['p1_stats']['current_pr'].rank, '5')
+        self.assertEqual(resp.context['p1_stats']['best_rank'], 5)
+
+    def test_national_season_cannot_be_active(self):
+        self.national.is_active = True
+        with self.assertRaises(_ValidationError):
+            self.national.full_clean()
+
+    def test_one_badge_prefers_the_year_end_national_placement(self):
+        badge = build_badge_map()[self.player.id]
+        self.assertEqual(badge['text'], '#20 SSBMRank 2025')
+        self.assertTrue(badge['current'])
+
+    def test_older_placement_is_marked_not_current(self):
+        newer = PRSeason.objects.create(
+            name='2026 MI', region_code_id=MICHIGAN_REGION_CODE, start_date=_dt.date(2026, 1, 1))
+        PRSeasonResult.objects.create(pr_season=newer, player=self.other, rank='HM')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=Player.objects.create(name='Old', id=900), rank='3')
+        badges = build_badge_map()
+        self.assertFalse(badges[900]['current'])
+        self.assertEqual(badges[900]['text'], 'MI #3')
+        self.assertEqual(badges[self.other.id]['text'], 'MI HM')
+        self.assertTrue(badges[self.other.id]['current'])
+
+    def test_other_regions_do_not_get_badges(self):
+        indiana = PRSeason.objects.create(name='Indiana', region_code_id=None)
+        PRSeasonResult.objects.create(pr_season=indiana, player=self.other, rank='1')
+        self.assertNotIn(self.other.id, build_badge_map())
+
+    def test_badge_lookup_runs_once_per_request(self):
+        request = _NS()
+        template = Template('{% load pr_badges %}{% pr_badges a %}{% pr_badges a %}{% pr_badges b %}')
+        with self.assertNumQueries(1):
+            html = template.render(Context({'request': request, 'a': self.player, 'b': self.other}))
+        self.assertEqual(html.count('#20 SSBMRank 2025'), 2)
+
+    def test_badges_replace_typed_rank_on_the_h2h_list(self):
+        tournament = Tournament.objects.create(id=1, name='T', date=_dt.date(2025, 2, 1), pr_season=self.mi)
+        Set.objects.create(id=1, player1=self.other, player2=self.player, player1_score=2,
+                           player2_score=0, winner_id=self.other.id, tournament=tournament)
+        url = reverse('player_detail', args=[self.other.id])
+        headers = {'HX-Request': 'true'}
+        # tournament_results is an unmanaged table with no test schema.
+        with _mock.patch('main.views.TournamentResults'):
+            normal = self.client.get(url, headers=headers)
+        self.assertNotContains(normal, 'MI #5')
+        self.assertContains(normal, '#20 SSBMRank 2025')
+        self.assertRegex(normal.content.decode(), r'>\s*Ossify\s*</a>')
+
+    def test_active_season_is_not_a_completed_pr(self):
+        active = PRSeason.objects.create(name='Now', region_code_id=MICHIGAN_REGION_CODE,
+                                         start_date=_dt.date(2026, 7, 1), is_active=True)
+        PRSeasonResult.objects.create(pr_season=active, player=self.other, rank='1')
+        self.assertNotIn(self.other.id, build_badge_map())
+        self.assertEqual(_player_pr_standing(self.other), [])
+
+    def test_standing_shows_current_then_highest_for_each_list(self):
+        older_mi = PRSeason.objects.create(name='2024 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                           start_date=_dt.date(2024, 1, 1))
+        PRSeasonResult.objects.create(pr_season=older_mi, player=self.player, rank='2')
+        older_national = PRSeason.objects.create(name='SSBMRank 2023', region_code_id=NATIONAL_REGION_CODE,
+                                                 start_date=_dt.date(2022, 12, 19))
+        PRSeasonResult.objects.create(pr_season=older_national, player=self.player, rank='35')
+        standing = [(s['heading'], s['rank'], s['season']) for s in _player_pr_standing(self.player)]
+        self.assertEqual(standing, [
+            ('Current MI PR', '#5', '2025 MI'),
+            ('Current & Highest National', '#20', 'SSBMRank 2025'),
+            ('Highest MI PR', '#2', '2024 MI'),
+        ])
+
+    def test_only_michigan_tiles_link_to_their_season(self):
+        tiles = {s['heading']: s['url'] for s in _player_pr_standing(self.player)}
+        self.assertEqual(tiles['Current & Highest MI PR'], f'/pr_season/{self.mi.pk}')
+        self.assertIsNone(tiles['Current & Highest National'])
+
+    def test_edit_profile_is_for_admins_only(self):
+        url = reverse('player_detail', args=[self.player.id])
+        edit_link = reverse('admin:main_player_change', args=[self.player.id])
+        with _mock.patch('main.views.TournamentResults'):
+            public = self.client.get(url)
+            self.client.force_login(_get_user_model().objects.create_superuser('boss', password='x'))
+            admin = self.client.get(url)
+        self.assertNotContains(public, edit_link)
+        self.assertContains(admin, edit_link)
+
+    def test_not_on_the_latest_list_means_no_current_tile(self):
+        newer = PRSeason.objects.create(name='2026 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                        start_date=_dt.date(2026, 1, 1))
+        PRSeasonResult.objects.create(pr_season=newer, player=self.other, rank='1')
+        headings = [s['heading'] for s in _player_pr_standing(self.player)]
+        self.assertNotIn('Current MI PR', headings)
+        self.assertIn('Highest MI PR', headings)
+
+    def test_inactive_listing_is_current_but_never_highest(self):
+        PRSeasonResult.objects.create(pr_season=self.mi, player=self.other, rank='IM')
+        standing = [(s['heading'], s['rank']) for s in _player_pr_standing(self.other)]
+        self.assertEqual(standing, [('Current MI PR', 'IM')])
+
+    def test_tied_rank_on_an_older_list_keeps_the_newest_as_highest(self):
+        older = PRSeason.objects.create(name='2024 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                        start_date=_dt.date(2024, 1, 1))
+        PRSeasonResult.objects.create(pr_season=older, player=self.player, rank='5')
+        headings = [s['heading'] for s in _player_pr_standing(self.player)]
+        self.assertEqual(headings.count('Current & Highest MI PR'), 1)
+        self.assertNotIn('Highest MI PR', headings)
+
+    def test_merge_moves_ranking_rows_and_keeps_main_accounts_placement(self):
+        duplicate = Player.objects.create(name='Ossify')
+        RankingListEntry.objects.create(pr_season=self.national, player=duplicate, source_tag='Ossify', rank='20')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=duplicate, rank='9')
+        other_season = PRSeason.objects.create(name='Old', region_code_id=MICHIGAN_REGION_CODE)
+        PRSeasonResult.objects.create(pr_season=other_season, player=duplicate, rank='3')
+
+        # tournament_results is an unmanaged table with no test schema.
+        with _mock.patch('main.views.TournamentResults'):
+            merge_accounts(self.player.id, duplicate.id)
+
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Ossify').player_id, self.player.id)
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=self.mi, player=self.player).rank, '5')
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=other_season).player_id, self.player.id)
+
+
+from django.db import connection as _connection
+from main.views import _ordinal, _round_sort_key
+from main.management.commands.backfill_event_info import build_query, clean_slug
+from main.data_entry import fetch_player_slugs
+
+
+class RoundSortKeyTests(SimpleTestCase):
+    def test_bracket_path_order(self):
+        rounds = ['Grand Final Reset', 'Losers Final', 'Winners Semi-Final', 'Grand Final',
+                  'Losers Round 2', 'Winners Round 1', 'Winners Final', 'Losers Quarter-Final']
+        self.assertEqual(sorted(rounds, key=_round_sort_key), [
+            'Winners Round 1', 'Winners Semi-Final', 'Winners Final', 'Losers Round 2',
+            'Losers Quarter-Final', 'Losers Final', 'Grand Final', 'Grand Final Reset'])
+
+    def test_missing_round_does_not_crash(self):
+        self.assertEqual(_round_sort_key(None), (1, 0, 0))
+
+    def test_ordinal(self):
+        self.assertEqual([_ordinal(n) for n in (1, 2, 3, 4, 11, 13, 21, 33)],
+                         ['1st', '2nd', '3rd', '4th', '11th', '13th', '21st', '33rd'])
+
+
+class TournamentPagesTestBase(TestCase):
+    """`tournament_results` is unmanaged, so these tests create it themselves."""
+
+    @classmethod
+    def setUpTestData(cls):
+        with _connection.cursor() as cur:
+            cur.execute('CREATE TABLE tournament_results ('
+                        'tournament_id integer, player_id integer, name varchar, placement integer)')
+        cls.michigan = _Region.objects.create(id=7, name='Michigan')
+        cls.ana = Player.objects.create(id=1, name='Ana', region_code=cls.michigan)
+        cls.bo = Player.objects.create(id=2, name='Bo')
+        cls.cy = Player.objects.create(id=3, name='Cy')
+
+    @staticmethod
+    def add_result(tournament_id, player_id, placement):
+        with _connection.cursor() as cur:
+            cur.execute('INSERT INTO tournament_results (tournament_id, player_id, placement) '
+                        'VALUES (%s, %s, %s)', [tournament_id, player_id, placement])
+
+
+class TournamentListPageTests(TournamentPagesTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.season = PRSeason.objects.create(name='S1')
+        for i in range(1, 31):
+            Tournament.objects.create(
+                id=i, name=f'Weekly {i:02d}', date=_dt.date(2026, 1, 1) + _dt.timedelta(days=i),
+                entrant_count=i, city='Ann Arbor' if i % 2 else 'Detroit', pr_season=cls.season)
+
+    def test_page_links_keep_search_season_and_sort(self):
+        resp = self.client.get(reverse('tournaments'),
+                               {'q': 'Weekly', 'pr_season': self.season.id, 'sort': 'name'})
+        self.assertContains(resp, f'q=Weekly&amp;pr_season={self.season.id}&amp;sort=name&page=2')
+
+    def test_search_also_matches_city(self):
+        resp = self.client.get(reverse('tournaments'), {'q': 'detroit'})
+        self.assertEqual(resp.context['page_obj'].paginator.count, 15)
+
+    def test_bad_filters_do_not_error(self):
+        resp = self.client.get(reverse('tournaments'), {'pr_season': 'abc', 'sort': 'password'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['page_obj'][0].id, 30)
+
+    def test_sort_and_toggle(self):
+        resp = self.client.get(reverse('tournaments'), {'sort': 'entrants'})
+        self.assertEqual(resp.context['page_obj'][0].id, 1)
+        self.assertEqual(resp.context['sort_links']['entrants']['url'], '?sort=-entrants')
+
+    def test_winner_shown_and_missing_winner_is_not_none(self):
+        self.add_result(30, self.ana.id, 1)
+        resp = self.client.get(reverse('tournaments'))
+        self.assertContains(resp, 'Ana')
+        self.assertNotContains(resp, 'None')
+
+    def test_several_first_places_show_a_count(self):
+        self.add_result(30, self.ana.id, 1)
+        self.add_result(30, self.bo.id, 1)
+        self.assertContains(self.client.get(reverse('tournaments')), '+1')
+
+    def test_query_count_does_not_grow_with_winners(self):
+        for i in range(10, 31):
+            self.add_result(i, self.ana.id, 1)
+        # Count, page, winners, badges, season dropdown, and two from the site-wide context processor.
+        with self.assertNumQueries(7):
+            self.client.get(reverse('tournaments'))
+
+
+class TournamentDetailPageTests(TournamentPagesTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.tournament = Tournament.objects.create(
+            id=100, name='Big One', date=_dt.date(2026, 2, 1), entrant_count=99, slug='big-one')
+        Set.objects.create(id=1, player1=cls.ana, player2=cls.bo, player1_score=3, player2_score=1,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Losers Final')
+        Set.objects.create(id=2, player1=cls.bo, player2=cls.ana, player1_score=2, player2_score=3,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Winners Round 1')
+        Set.objects.create(id=3, player1=cls.cy, player2=cls.ana, player1_score=-1, player2_score=0,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Grand Final')
+        cls.add_result(100, cls.ana.id, 1)
+        cls.add_result(100, cls.bo.id, 2)
+        cls.url = reverse('tournament_details', args=[100])
+
+    def test_viewing_does_not_change_entrant_count(self):
+        self.client.get(self.url)
+        self.tournament.refresh_from_db()
+        self.assertEqual(self.tournament.entrant_count, 99)
+
+    def test_placed_players_first_then_unplaced(self):
+        standings = list(self.client.get(self.url).context['page_obj'])
+        self.assertEqual([r['player'].name for r in standings], ['Ana', 'Bo', 'Cy'])
+        self.assertIsNone(standings[2]['placement'])
+
+    def test_record_excludes_dqs(self):
+        ana = self.client.get(self.url).context['page_obj'][0]
+        self.assertEqual((ana['wins'], ana['losses']), (2, 0))
+
+    def test_michigan_view_filters_players(self):
+        standings = list(self.client.get(self.url, {'michigan_view': 'on'}).context['page_obj'])
+        self.assertEqual([r['player'].name for r in standings], ['Ana'])
+
+    def test_edit_links_only_for_staff(self):
+        admin_url = reverse('admin:main_tournament_change', args=[100])
+        self.assertNotContains(self.client.get(self.url), admin_url)
+        self.client.force_login(get_user_model().objects.create_superuser('s', 's@x.com', 'pw'))
+        self.assertContains(self.client.get(self.url), admin_url)
+
+    def test_player_sets_from_that_players_side_in_bracket_order(self):
+        resp = self.client.get(reverse('tournament_player_sets', args=[100, self.bo.id]))
+        rows = resp.context['rows']
+        self.assertEqual([r['round'] for r in rows], ['Winners Round 1', 'Losers Final'])
+        self.assertEqual([r['score'] for r in rows], ['2 - 3', '1 - 3'])
+        self.assertEqual([r['result'] for r in rows], ['L', 'L'])
+
+    def test_player_sets_label_dq_instead_of_minus_one(self):
+        resp = self.client.get(reverse('tournament_player_sets', args=[100, self.cy.id]))
+        self.assertEqual(resp.context['rows'][0]['result'], 'DQ')
+        self.assertIsNone(resp.context['rows'][0]['score'])
+        self.assertNotContains(resp, '-1')
+
+    def test_set_edit_links_only_for_staff(self):
+        sets_url = reverse('tournament_player_sets', args=[100, self.bo.id])
+        self.assertNotContains(self.client.get(sets_url), 'Edit')
+        self.client.force_login(get_user_model().objects.create_superuser('s', 's@x.com', 'pw'))
+        self.assertContains(self.client.get(sets_url), 'Edit')
+
+
+class BackfillEventInfoTests(TestCase):
+    def setUp(self):
+        Tournament.objects.create(id=1, name='No slug', date=_dt.date(2026, 1, 1), entrant_count=15)
+        Tournament.objects.create(id=2, name='Has slug', date=_dt.date(2026, 1, 2), entrant_count=9, slug='kept')
+
+    def _run(self, *args):
+        reply = _mock.Mock(status_code=200)
+        reply.json.return_value = {'data': {
+            'e1': {'numEntrants': 7, 'tournament': {'slug': 'tournament/new-slug'}},
+            'e2': {'numEntrants': 8, 'tournament': {'slug': 'tournament/other'}},
+        }}
+        module = 'main.management.commands.backfill_event_info'
+        with _mock.patch(f'{module}.requests.post', return_value=reply), \
+                _mock.patch(f'{module}.time.sleep'), \
+                _mock.patch(f'{module}.environ.Env') as env:
+            env.return_value.return_value = 'token'
+            _call_command('backfill_event_info', *args, stdout=_StringIO())
+
+    def test_fills_only_missing_slugs_and_leaves_counts_by_default(self):
+        self._run()
+        first, second = Tournament.objects.get(id=1), Tournament.objects.get(id=2)
+        self.assertEqual((first.slug, first.entrant_count), ('new-slug', 15))
+        self.assertEqual((second.slug, second.entrant_count), ('kept', 9))
+
+    def test_entrants_flag_corrects_counts_but_never_replaces_a_slug(self):
+        self._run('--entrants')
+        self.assertEqual(Tournament.objects.get(id=1).entrant_count, 7)
+        second = Tournament.objects.get(id=2)
+        self.assertEqual((second.slug, second.entrant_count), ('kept', 8))
+
+    def test_dry_run_saves_nothing(self):
+        self._run('--entrants', '--dry-run')
+        first = Tournament.objects.get(id=1)
+        self.assertEqual((first.slug, first.entrant_count), (None, 15))
+
+    def test_helpers(self):
+        self.assertEqual(clean_slug('tournament/abc'), 'abc')
+        self.assertIn('e5: event(id: 5)', build_query([5]))
+
+
+class PlayerStartggLinkTests(TournamentPagesTestBase):
+    def _api_reply(self, data):
+        reply = _mock.Mock(status_code=200)
+        reply.json.return_value = {'data': data}
+        return reply
+
+    def test_url_only_when_slug_is_known(self):
+        self.assertIsNone(Player(name='x').startgg_url)
+        self.assertEqual(Player(name='x', startgg_slug='ab12').startgg_url, 'https://www.start.gg/user/ab12')
+
+    def test_player_page_links_to_start_gg_only_with_a_slug(self):
+        url = reverse('player_detail', args=[self.bo.id])
+        self.assertNotContains(self.client.get(url), 'View on start.gg')
+        Player.objects.filter(id=self.bo.id).update(startgg_slug='ab12')
+        self.assertContains(self.client.get(url), 'https://www.start.gg/user/ab12')
+
+    def test_fetch_strips_prefix_and_skips_players_without_accounts(self):
+        reply = self._api_reply({'p1': {'user': {'slug': 'user/ab12'}}, 'p2': {'user': None}, 'p3': None})
+        with _mock.patch('main.data_entry.requests.post', return_value=reply):
+            self.assertEqual(fetch_player_slugs('t', [1, 2, 3]), {1: 'ab12'})
+
+    def test_fetch_returns_none_on_failure(self):
+        with _mock.patch('main.data_entry.requests.post', return_value=_mock.Mock(status_code=500)):
+            self.assertIsNone(fetch_player_slugs('t', [1]))
+
+    def _backfill(self, *args):
+        module = 'main.management.commands.backfill_player_slugs'
+        with _mock.patch(f'{module}.fetch_player_slugs', return_value={1: 'new'}) as fetch, \
+                _mock.patch(f'{module}.time.sleep'), \
+                _mock.patch(f'{module}.environ.Env') as env:
+            env.return_value.return_value = 'token'
+            _call_command('backfill_player_slugs', *args, stdout=_StringIO())
+        return fetch
+
+    def test_backfill_never_touches_an_existing_slug(self):
+        Player.objects.filter(id=self.bo.id).update(startgg_slug='kept')
+        fetch = self._backfill()
+        self.assertEqual(fetch.call_args.args[1], [1, 3])
+        self.assertEqual(Player.objects.get(id=1).startgg_slug, 'new')
+        self.assertEqual(Player.objects.get(id=2).startgg_slug, 'kept')
+
+    def test_backfill_dry_run_saves_nothing(self):
+        self._backfill('--dry-run')
+        self.assertIsNone(Player.objects.get(id=1).startgg_slug)
+
+
+import importlib as _importlib
+from django.apps import apps as _apps
+
+
+class AttendanceBreakdownTests(TestCase):
+    def setUp(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=10, name='Out of State')
+        self.player = Player.objects.create(name='Ana')
+        self.other = Player.objects.create(name='Ben')
+        self.season = PRSeason.objects.create(name='S', region_code_id=MICHIGAN_REGION_CODE)
+        regions = [MICHIGAN_REGION_CODE, MICHIGAN_REGION_CODE, 10, None]
+        for i, region in enumerate(regions, start=1):
+            tournament = Tournament.objects.create(
+                id=i, name=f'T{i}', date=_dt.date(2025, 1, i), region_code_id=region,
+                pr_season=self.season if i == 1 else None)
+            Set.objects.create(id=i * 10, player1=self.player, player2=self.other, player1_score=2,
+                               player2_score=0, winner_id=self.player.id, tournament=tournament)
+
+    def attendance(self, **params):
+        with _mock.patch('main.views.TournamentResults'):
+            return self.client.get(reverse('player_detail', args=[self.player.id]), params).context['attendance']
+
+    def test_splits_michigan_from_everything_else(self):
+        self.assertEqual(self.attendance(), {'michigan': 2, 'out_of_state': 2, 'total': 4})
+
+    def test_follows_the_season_filter(self):
+        self.assertEqual(self.attendance(pr_season=self.season.id),
+                         {'michigan': 1, 'out_of_state': 0, 'total': 1})
+
+
+class FillMichiganRegionsMigrationTests(TestCase):
+    def test_fills_only_blank_regions_with_a_michigan_state(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=10, name='Out of State')
+        Tournament.objects.create(id=1, name='Blank MI', state='MI')
+        Tournament.objects.create(id=2, name='Blank OH', state='OH')
+        Tournament.objects.create(id=3, name='Set elsewhere', state='MI', region_code_id=10)
+        Tournament.objects.create(id=4, name='No state')
+
+        migration = _importlib.import_module('main.migrations.0052_fill_michigan_tournament_regions')
+        migration.fill_michigan_regions(_apps, None)
+
+        regions = dict(Tournament.objects.values_list('id', 'region_code_id'))
+        self.assertEqual(regions, {1: MICHIGAN_REGION_CODE, 2: None, 3: 10, 4: None})
+
+
+class JourneyLandingTests(TestCase):
+    def test_starts_as_a_landing_page_with_a_description(self):
+        resp = self.client.get(reverse('journey'))
+        self.assertContains(resp, 'class="journey-hero is-landing"')
+        self.assertContains(resp, "An animated trip through a player's tournament history", html=False)
+
+    def test_a_link_to_a_player_skips_the_landing_page(self):
+        player = Player.objects.create(name='Ana')
+        resp = self.client.get(reverse('journey'), {'player': player.id})
+        self.assertContains(resp, 'class="journey-hero"')
+        self.assertNotContains(resp, 'class="journey-hero is-landing"')

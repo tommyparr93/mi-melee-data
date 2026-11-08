@@ -5,8 +5,12 @@
         <div class="card h-100 shadow-sm border-0" style="border-radius: 12px;">
             <div class="card-body text-center p-3">
                 <div class="text-muted small fw-bold text-uppercase mb-2" style="font-size: 0.7rem; letter-spacing: 1px;">Attendance</div>
-                <h2 class="display-6 fw-bold mb-0 text-primary">{{ calculations.tournament_count }}</h2>
-                <div class="small text-muted mt-1">Tournaments</div>
+                <h2 class="display-6 fw-bold mb-0 text-primary">{{ attendance.total }}</h2>
+                <div class="small text-muted mt-1">
+                    <span class="fw-bold text-dark">{{ attendance.michigan }}</span> Michigan
+                    <span class="mx-1">&middot;</span>
+                    <span class="fw-bold text-dark">{{ attendance.out_of_state }}</span> Out of State
+                </div>
             </div>
         </div>
     </div>

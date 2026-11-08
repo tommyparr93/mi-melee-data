@@ -1,61 +1,106 @@
 {% extends 'base.html' %}
-{% block title %}Tournament Details{% endblock %}
+{% load pr_badges %}
+{% block title %}{{ tournament.name }}{% endblock %}
+{% block extra_head %}
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+    .place-badge { display: inline-block; min-width: 42px; padding: 3px 8px; border-radius: 4px; text-align: center; font-weight: 600; }
+    .place-1 { background: #ffc107; color: #212529; }
+    .place-2 { background: #adb5bd; color: #fff; }
+    .place-3 { background: #cd7f32; color: #fff; }
+    .player-icon { width: 20px; height: 20px; object-fit: contain; margin-right: 6px; }
+    .sets-cell { background: #f8f9fa; padding: 0 !important; }
+    .tournament-sets .set-result { width: 48px; padding-left: 16px; }
+    .tournament-sets .set-score { width: 72px; white-space: nowrap; }
+</style>
+{% endblock %}
 {% block content %}
-  <h1>{{ tournament.name }}</h1>
-  {% if tournament.slug %}
-  <p><a href="https://www.start.gg/tournament/{{ tournament.slug }}" target="_blank" class="btn btn-sm btn-outline-info">View on Start.gg</a></p>
-  {% endif %}
-        <form method="get" id="filter-form">
-                        <input type="checkbox" name="michigan_view" id="michigan_view"  {% if request.GET.michigan_view %}checked{% endif %}>
-        <label for="michigan_view">Michigan View</label>
-        </form>
-  <a href="{% url 'admin:main_tournament_change' tournament.id %}" class="btn btn-primary" style="float: right;">Edit</a>
-  <p><strong>Date: </strong>{{ tournament.date }}</p>
-  <p><strong>Entrants: </strong>{{ count }}</p>
-  <p><strong>PR Season: </strong>{{ tournament.pr_season.name }}</p>
-  <h2>Sets</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Player 1</th>
-        <th>Player 2</th>
-        <th>Player 1 Score</th>
-        <th>Player 2 Score</th>
-        <th>Round</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for set in sets %}
-        <tr>
-          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
-          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
-          <td>{{ set.player1_score }}</td>
-          <td>{{ set.player2_score }}</td>
-          <td>{{ set.location }}</td>
-          <td><a href="{% url 'admin:main_set_change' set.id %}"> <button  type="button" class="btn btn-default btn-sm">Edit </button></a> </td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  <h2>Tournaments Results</h2>
-  <table>
-    <thead>
-      <tr>
-        <th>Placement</th>
-        <th>Player Name</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for result in results %}
-        <tr>
-          <td>{{ result.placement }}</td>
-          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id.name }}</a></td>
-        </tr>
-      {% empty %}
-        <tr>
-          <td colspan="2">No tournaments found</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<div class="container mt-4">
+    <p class="mb-2"><a href="{% url 'tournaments' %}" class="text-decoration-none">&larr; All tournaments</a></p>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-start mb-2" style="gap: 8px;">
+        <h2 class="mb-0">{{ tournament.name }}</h2>
+        <div class="d-flex" style="gap: 8px;">
+            {% if tournament.slug %}<a href="https://www.start.gg/tournament/{{ tournament.slug }}" target="_blank" rel="noopener" class="btn btn-primary">View on start.gg</a>{% endif %}
+            {% if user.is_staff %}<a href="{% url 'admin:main_tournament_change' tournament.id %}" class="btn btn-outline-secondary">Edit</a>{% endif %}
+        </div>
+    </div>
+
+    <p class="text-muted mb-4">
+        {{ tournament.date|date:"F j, Y" }}{% if tournament.city %} &middot; {{ tournament.city }}{% if tournament.state %}, {{ tournament.state }}{% endif %}{% endif %}{% if tournament.venue_name %} &middot; {{ tournament.venue_name }}{% endif %}{% if tournament.entrant_count %} &middot; {{ tournament.entrant_count }} entrant{{ tournament.entrant_count|pluralize }}{% endif %}{% if tournament.pr_season %} &middot; <a href="{% url 'pr_season_details' tournament.pr_season.id %}" class="text-decoration-none">{{ tournament.pr_season.name }}</a>{% endif %}
+    </p>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center mb-2" style="gap: 8px;">
+        <h4 class="mb-0">Results</h4>
+        {% if michigan_count and michigan_count < standings_count %}
+        <div class="btn-group btn-group-sm" role="group" aria-label="Which players to show">
+            <a href="{% url 'tournament_details' tournament.pk %}" class="btn {% if michigan_view %}btn-outline-secondary{% else %}btn-secondary{% endif %}">Everyone ({{ standings_count }})</a>
+            <a href="{% url 'tournament_details' tournament.pk %}?michigan_view=on" class="btn {% if michigan_view %}btn-secondary{% else %}btn-outline-secondary{% endif %}">Michigan ({{ michigan_count }})</a>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card shadow-sm">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 90px;">Place</th>
+                        <th>Player</th>
+                        <th class="text-end text-right" style="width: 90px;">Record</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in page_obj %}
+                    <tr>
+                        <td>
+                            {% if row.place_label %}
+                                <span class="place-badge {% if row.placement <= 3 %}place-{{ row.placement }}{% endif %}">{{ row.place_label }}</span>
+                            {% else %}
+                                <span class="text-muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if row.player.main_char.icon_path %}<img src="{{ row.player.main_char.icon_path }}" alt="{{ row.player.main_char.name }}" class="player-icon">{% endif %}<a href="{% url 'player_detail' row.player.id %}" class="fw-bold text-decoration-none">{{ row.player.name|clean_tag }}</a>{% pr_badges row.player %}
+                            {% if row.has_sets %}
+                            <button type="button" class="btn btn-sm btn-outline-secondary ml-2 ms-2 js-sets-toggle"
+                                    hx-get="{% url 'tournament_player_sets' tournament.pk row.player.id %}"
+                                    hx-target="#sets-{{ row.player.id }}"
+                                    hx-trigger="click once"
+                                    data-row="sets-row-{{ row.player.id }}"
+                                    aria-expanded="false" aria-controls="sets-row-{{ row.player.id }}">Sets</button>
+                            {% endif %}
+                        </td>
+                        <td class="text-end text-right text-nowrap">{% if row.has_sets %}{{ row.wins }} - {{ row.losses }}{% endif %}</td>
+                    </tr>
+                    {% if row.has_sets %}
+                    <tr id="sets-row-{{ row.player.id }}" class="d-none">
+                        <td colspan="3" class="sets-cell" id="sets-{{ row.player.id }}"><div class="text-muted p-2">Loading&hellip;</div></td>
+                    </tr>
+                    {% endif %}
+                    {% empty %}
+                    <tr><td colspan="3" class="text-center text-muted py-4">No results have been recorded for this tournament.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    {% if unplaced_count and has_placements %}
+    <p class="text-muted small mt-2">{{ unplaced_count }} player{{ unplaced_count|pluralize }} played sets here but {{ unplaced_count|pluralize:"has,have" }} no stored placement, so {{ unplaced_count|pluralize:"they appear,they appear" }} after the placed players.</p>
+    {% endif %}
+
+    {% include 'main/partials/tournament_pagination.html' %}
+</div>
+
+<script>
+    document.addEventListener('click', function (event) {
+        var button = event.target.closest('.js-sets-toggle');
+        if (!button) { return; }
+        var row = document.getElementById(button.dataset.row);
+        var isOpening = row.classList.toggle('d-none') === false;
+        button.textContent = isOpening ? 'Hide' : 'Sets';
+        button.setAttribute('aria-expanded', String(isOpening));
+    });
+</script>
 {% endblock %}

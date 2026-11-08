@@ -1,0 +1,13 @@
+{% if pr_standing %}
+<div class="d-flex flex-wrap gap-2 mt-3">
+    {% for item in pr_standing %}
+    {% if item.url %}<a href="{{ item.url }}" class="text-decoration-none" title="View this PR season">{% endif %}
+    <div class="border rounded px-3 py-2 bg-white h-100" style="min-width: 150px; border-left: 3px solid {% if item.is_michigan %}#0d6efd{% else %}#6f42c1{% endif %} !important;">
+        <div class="text-muted text-uppercase fw-bold" style="font-size: 0.68rem; letter-spacing: 0.4px;">{{ item.heading }}</div>
+        <div class="fw-bold" style="font-size: 1.15rem; color: {% if item.is_michigan %}#0d6efd{% else %}#6f42c1{% endif %};">{{ item.rank }}</div>
+        <div class="text-muted" style="font-size: 0.75rem;">{{ item.season }}</div>
+    </div>
+    {% if item.url %}</a>{% endif %}
+    {% endfor %}
+</div>
+{% endif %}
