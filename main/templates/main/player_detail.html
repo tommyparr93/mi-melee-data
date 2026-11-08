@@ -31,7 +31,7 @@
                     
                     <div class="d-flex flex-wrap gap-2 mb-3 mt-3">
                         {% if player.region_code %}
-                            <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2">
+                            <span class="badge rounded-pill bg-light text-primary border border-primary px-3 py-2 d-flex align-items-center">
                                 <i class="bi bi-geo-alt-fill me-1"></i> {{ player.region_code.name }}
                             </span>
                         {% endif %}
@@ -46,7 +46,7 @@
                             </span>
                         {% endif %}
                         {% if player.pr_notable %}
-                            <span class="badge rounded-pill bg-primary px-3 py-2">Notable Player</span>
+                            <span class="badge rounded-pill bg-primary px-3 py-2 d-flex align-items-center">Notable Player</span>
                         {% endif %}
                     </div>
 
