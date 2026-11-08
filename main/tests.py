@@ -920,3 +920,76 @@ class SeasonVideoTests(TestCase):
             resp = self._admin_post(SimpleUploadedFile('clip.mp4', _MP4_BYTES, content_type='video/mp4'))
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, 'over 150 MB')
+
+
+class AdminToolAccessTests(TestCase):
+    """The tournament importer and duplicate merge change live data, so the
+    server must refuse them. The menu only hiding their links is not enough."""
+
+    def setUp(self):
+        User = get_user_model()
+        self.admin = User.objects.create_superuser('tooladmin', 't@x.com', 'pw')
+        self.plain = User.objects.create_user('toolplain', 'tp@x.com', 'pw')
+        self.main_player = Player.objects.create(id=9001, name='Main')
+        self.duplicate = Player.objects.create(id=9002, name='Alt')
+
+    def _assert_sent_to_login(self, resp):
+        self.assertEqual(resp.status_code, 302)
+        self.assertTrue(resp['Location'].startswith('/admin/login/'))
+
+    def _post_import(self, **extra):
+        return self.client.post(reverse('tournament_form'), {
+            'tournament_url': 'https://www.start.gg/tournament/x/event/y',
+            'is_pr_eligible': 'on',
+            **extra,
+        })
+
+    def _post_merge(self):
+        session = self.client.session
+        session['main_account'] = str(self.main_player.id)
+        session['duplicate_account'] = str(self.duplicate.id)
+        session.save()
+        return self.client.post(reverse('join_duplicate'), {
+            'confirm_merge': 'on',
+        })
+
+    def test_forms_refuse_anonymous_and_non_superuser_gets(self):
+        for name in ('tournament_form', 'join_duplicate'):
+            with self.subTest(view=name, user='anonymous'):
+                self._assert_sent_to_login(self.client.get(reverse(name)))
+        self.client.force_login(self.plain)
+        for name in ('tournament_form', 'join_duplicate'):
+            with self.subTest(view=name, user='plain'):
+                self._assert_sent_to_login(self.client.get(reverse(name)))
+
+    def test_import_refused_without_superuser(self):
+        with _mock.patch('main.views.enter_tournament') as sync_import, \
+                _mock.patch('main.views.threading.Thread') as background:
+            self._assert_sent_to_login(self._post_import())
+            self._assert_sent_to_login(self._post_import(run_in_background='on'))
+            self.client.force_login(self.plain)
+            self._assert_sent_to_login(self._post_import())
+            self._assert_sent_to_login(self._post_import(run_in_background='on'))
+        sync_import.assert_not_called()
+        background.assert_not_called()
+
+    def test_merge_refused_without_superuser(self):
+        with _mock.patch('main.views.merge_accounts') as merge:
+            self._assert_sent_to_login(self._post_merge())
+            self.client.force_login(self.plain)
+            self._assert_sent_to_login(self._post_merge())
+        merge.assert_not_called()
+        self.assertTrue(Player.objects.filter(id=self.duplicate.id).exists())
+
+    def test_superuser_can_use_both_tools(self):
+        self.client.force_login(self.admin)
+        self.assertEqual(self.client.get(reverse('tournament_form')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('join_duplicate')).status_code, 200)
+        with _mock.patch('main.views.enter_tournament',
+                         return_value=HttpResponse('ok')) as sync_import:
+            self.assertEqual(self._post_import().status_code, 200)
+        sync_import.assert_called_once()
+        with _mock.patch('main.views.merge_accounts') as merge:
+            self.assertEqual(self._post_merge().status_code, 200)
+        merge.assert_called_once_with(
+            str(self.main_player.id), str(self.duplicate.id))

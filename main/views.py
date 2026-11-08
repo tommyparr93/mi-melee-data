@@ -23,6 +23,11 @@ from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from functools import wraps
 
+# Admin tools are superuser-only. Match base.html's `is_superuser` convention
+# (the only staff are superusers). Hiding a menu link is not access control:
+# every view that changes data needs this or an equivalent server-side check.
+superuser_required = user_passes_test(lambda u: u.is_superuser)
+
 class HomeView(generic.TemplateView):
     template_name = 'main/home.html'
 
@@ -212,6 +217,7 @@ from django.contrib import messages
 import threading
 from .data_entry import enter_tournament_async
 
+@superuser_required
 def put_tournament(request):
     if request.method == 'POST':
         form = TournamentForm(request.POST)
@@ -245,6 +251,7 @@ def put_tournament(request):
         return render(request, 'main/tournament_form.html', context)
 
 
+@superuser_required
 def join_duplicate(request):
     player_details = None
     merge_success = False
@@ -345,11 +352,6 @@ def get_player_details(main_account, duplicate_account):
         # Handle case where player does not exist
         print(f"Player with id {main_account} or {duplicate_account} not found!")
         return None
-
-
-# Season management is an admin-only tool. Match base.html's `is_superuser`
-# convention (the only staff are superusers).
-superuser_required = user_passes_test(lambda u: u.is_superuser)
 
 
 def _rank_sort_key(result):
