@@ -475,7 +475,8 @@ class PublicPrSeasonPageOrderTests(TestCase):
     is a text column, so it must sort 1, 2 ... 10, then HM, then IM."""
 
     def test_members_are_sorted_numerically_then_hm_then_im(self):
-        season = PRSeason.objects.create(name='Order Test')
+        _Region.objects.create(id=7, name='Michigan')
+        season = PRSeason.objects.create(name='Order Test', region_code_id=7)
         for i, rank in enumerate(['IM', '10', 'HM', '2', '1', '11']):
             PRSeasonResult.objects.create(
                 pr_season=season, player=Player.objects.create(name=f'P{i}'), rank=rank)
@@ -578,7 +579,7 @@ class SeasonPageContextTests(TestCase):
 
     def test_page_renders_for_a_season_and_for_an_empty_one(self):
         self.assertEqual(self.client.get(f'/pr_season/{self.cur.pk}').status_code, 200)
-        empty = PRSeason.objects.create(name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30))
+        empty = PRSeason.objects.create(name='Empty', start_date=_dt.date(2026, 1, 1), end_date=_dt.date(2026, 6, 30), region_code_id=7)
         resp = self.client.get(f'/pr_season/{empty.pk}')
         self.assertEqual(resp.status_code, 200)
         self.assertContains(resp, "haven't been published yet")
@@ -993,3 +994,228 @@ class AdminToolAccessTests(TestCase):
             self.assertEqual(self._post_merge().status_code, 200)
         merge.assert_called_once_with(
             str(self.main_player.id), str(self.duplicate.id))
+
+
+from django.contrib.auth import get_user_model as _get_user_model
+from django.core.exceptions import ValidationError as _ValidationError
+from django.core.management.base import CommandError as _CommandError
+from main.models import RankingListEntry, NATIONAL_REGION_CODE, MICHIGAN_REGION_CODE
+from main.data_entry import michigan_season_for_date
+from main.views import merge_accounts, _national_rank_labels
+from main.management.commands.import_pr_season import parse_wiki_rows, parse_wiki_period
+
+
+WIKI_PAGE = """{{Infobox Ranking
+|period         = December 16th, 2024 - December 14th, 2025
+|region         = Global
+}}
+{{PowerRankingsRow| 1|Zain                | 1|{{Head|Marth|g=SSBM|s=20px}}|USA|score=100}}
+{{PowerRankingsRow| 2|Ossify              | 7|{{Head|Fox|g=SSBM|s=20px}}|USA|score=99.21}}
+{{PowerRankingsRow|3|Blue             |66| {{head|Fox|g=SSBM|s=20px}}|USA|location=Indiana|score=&mdash;}}
+{{PowerRankingsRow|4|Twin|5|{{Head|Fox}}|USA|score=50}}
+{{PowerRankingsRow|5|[[Smasher:Fresh|Fresh]]|-|{{Head|Fox}}|USA|score=49}}
+"""
+
+
+class WikiParsingTests(SimpleTestCase):
+    def test_reads_rank_tag_previous_and_score(self):
+        rows = parse_wiki_rows(WIKI_PAGE)
+        self.assertEqual([r['tag'] for r in rows], ['Zain', 'Ossify', 'Blue', 'Twin', 'Fresh'])
+        self.assertEqual(rows[1]['rank'], '2')
+        self.assertEqual(rows[1]['previous_rank'], '7')
+        self.assertEqual(rows[1]['score'], 99.21)
+
+    def test_non_numeric_score_is_empty_and_raw_row_is_kept(self):
+        row = parse_wiki_rows(WIKI_PAGE)[2]
+        self.assertIsNone(row['score'])
+        self.assertIn('location=Indiana', row['raw_row'])
+
+    def test_period(self):
+        self.assertEqual(parse_wiki_period(WIKI_PAGE),
+                         (_dt.date(2024, 12, 16), _dt.date(2025, 12, 14)))
+
+
+class ImportPrSeasonTests(TestCase):
+    def setUp(self):
+        _Region.objects.create(id=NATIONAL_REGION_CODE, name='National')
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        self.zain = Player.objects.create(name='Zain (#1, SSBMRank 2025)')
+        self.zain_alt = Player.objects.create(name='Zain')
+        self.ossify = Player.objects.create(name='Ossify (#2, SSBM Rank 2025)')
+        self.twin_a = Player.objects.create(name='Twin')
+        self.twin_b = Player.objects.create(name='Twin')
+
+    def run_import(self, *extra, name='SSBMRank 2025', region='National', page=WIKI_PAGE):
+        out = _StringIO()
+        with _mock.patch('main.management.commands.import_pr_season.fetch_wikitext', return_value=page):
+            _call_command('import_pr_season', '--region', region, '--name', name,
+                          '--wiki-page', 'SSBMRank_2025', *extra, stdout=out)
+        return out.getvalue()
+
+    def overrides_file(self, text):
+        handle = _tempfile.NamedTemporaryFile('w', suffix='.csv', delete=False, encoding='utf-8')
+        handle.write(text)
+        handle.close()
+        self.addCleanup(_os.unlink, handle.name)
+        return handle.name
+
+    def test_dry_run_writes_nothing_and_reports_problems(self):
+        output = self.run_import('--dry-run')
+        self.assertFalse(PRSeason.objects.filter(name='SSBMRank 2025').exists())
+        self.assertFalse(RankingListEntry.objects.exists())
+        self.assertIn('Ambiguous', output)
+        self.assertIn('Not found', output)
+
+    def test_every_row_is_stored_but_only_matches_get_results(self):
+        self.run_import()
+        season = PRSeason.objects.get(name='SSBMRank 2025')
+        self.assertEqual(season.region_code_id, NATIONAL_REGION_CODE)
+        self.assertFalse(season.is_active)
+        self.assertEqual(season.start_date, _dt.date(2024, 12, 16))
+        self.assertEqual(RankingListEntry.objects.filter(pr_season=season).count(), 5)
+        self.assertEqual(
+            set(PRSeasonResult.objects.filter(pr_season=season).values_list('player_id', 'rank')),
+            {(self.zain.id, '1'), (self.ossify.id, '2')})
+        self.assertIsNone(RankingListEntry.objects.get(source_tag='Blue').player_id)
+        self.assertIsNone(RankingListEntry.objects.get(source_tag='Twin').player_id)
+
+    def test_duplicate_accounts_resolve_to_the_annotated_one(self):
+        self.run_import()
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Zain').player_id, self.zain.id)
+
+    def test_rerun_is_idempotent(self):
+        self.run_import()
+        self.run_import()
+        self.assertEqual(RankingListEntry.objects.count(), 5)
+        self.assertEqual(PRSeasonResult.objects.count(), 2)
+        self.assertEqual(PRSeason.objects.filter(name='SSBMRank 2025').count(), 1)
+
+    def test_override_settles_ambiguous_tag_on_rerun(self):
+        self.run_import()
+        path = self.overrides_file(f'tag,player_id\nTwin,{self.twin_b.id}\n')
+        self.run_import('--overrides', path)
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Twin').player_id, self.twin_b.id)
+        self.assertTrue(PRSeasonResult.objects.filter(player=self.twin_b, rank='4').exists())
+
+    def test_override_for_unknown_player_is_refused(self):
+        path = self.overrides_file('tag,player_id\nTwin,999999\n')
+        with self.assertRaises(_CommandError):
+            self.run_import('--overrides', path)
+
+    def test_existing_result_is_never_overwritten(self):
+        self.run_import()
+        PRSeasonResult.objects.filter(player=self.ossify).update(rank='9')
+        self.assertIn('Left as is', self.run_import())
+        self.assertEqual(PRSeasonResult.objects.get(player=self.ossify).rank, '9')
+
+    def test_regionless_season_is_reused_and_dates_kept_unless_asked(self):
+        season = PRSeason.objects.create(name='SSBMRank 2025', start_date=_dt.date(2023, 8, 8),
+                                         end_date=_dt.date(2023, 8, 8))
+        self.run_import()
+        season.refresh_from_db()
+        self.assertEqual(season.region_code_id, NATIONAL_REGION_CODE)
+        self.assertEqual(season.start_date, _dt.date(2023, 8, 8))
+        self.run_import('--update-dates')
+        season.refresh_from_db()
+        self.assertEqual(season.end_date, _dt.date(2025, 12, 14))
+
+    def test_season_in_another_region_is_refused(self):
+        PRSeason.objects.create(name='SSBMRank 2025', region_code_id=MICHIGAN_REGION_CODE)
+        with self.assertRaises(_CommandError):
+            self.run_import()
+
+    def test_csv_source_works_for_a_regional_season(self):
+        _Region.objects.create(id=50, name='Indiana')
+        path = self.overrides_file('rank,tag,score\n1,Ossify,10\nHM,Nobody,\n')
+        _call_command('import_pr_season', '--region', 'Indiana', '--name', 'Indiana Spring',
+                      '--csv', path, '--start', '2025-01-01', '--end', '2025-04-30', stdout=_StringIO())
+        season = PRSeason.objects.get(name='Indiana Spring')
+        self.assertEqual(season.region_code_id, 50)
+        self.assertEqual(RankingListEntry.objects.filter(pr_season=season).count(), 2)
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=season).player_id, self.ossify.id)
+
+
+class NationalSeasonIsolationTests(TestCase):
+    """National lists live in pr_season but must not affect anything Michigan."""
+
+    def setUp(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=NATIONAL_REGION_CODE, name='National')
+        self.mi = PRSeason.objects.create(
+            name='2025 MI', region_code_id=MICHIGAN_REGION_CODE,
+            start_date=_dt.date(2025, 1, 1), end_date=_dt.date(2025, 6, 30))
+        self.national = PRSeason.objects.create(
+            name='SSBMRank 2025', region_code_id=NATIONAL_REGION_CODE,
+            start_date=_dt.date(2024, 12, 16), end_date=_dt.date(2025, 12, 14))
+        self.summer = PRSeason.objects.create(
+            name='SSBMRank Summer 2026', region_code_id=NATIONAL_REGION_CODE,
+            start_date=_dt.date(2025, 12, 15), end_date=_dt.date(2026, 7, 12))
+        self.player = Player.objects.create(name='Ossify (#20, SSBM Rank 2025)')
+        self.other = Player.objects.create(name='Rival')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=self.player, rank='5')
+        PRSeasonResult.objects.create(pr_season=self.national, player=self.player, rank='20')
+        PRSeasonResult.objects.create(pr_season=self.summer, player=self.player, rank='11')
+
+    def test_new_tournaments_only_land_in_michigan_seasons(self):
+        self.assertEqual(michigan_season_for_date(_dt.date(2025, 3, 1)), self.mi)
+        self.assertIsNone(michigan_season_for_date(_dt.date(2025, 10, 1)))
+
+    def test_public_page_404s_for_national(self):
+        self.assertEqual(self.client.get(f'/pr_season/{self.national.pk}').status_code, 404)
+        self.assertEqual(self.client.get(f'/pr_season/{self.mi.pk}').status_code, 200)
+
+    def test_season_management_list_leaves_national_out(self):
+        admin = _get_user_model().objects.create_superuser('boss', password='x')
+        self.client.force_login(admin)
+        PRSeason.objects.create(name='Indiana', region_code_id=None)
+        for view, expected in (('mi', {'2025 MI'}), ('other', {'Indiana'})):
+            resp = self.client.get(reverse('pr_season_list'), {'view': view})
+            self.assertEqual({s.name for s in resp.context['seasons']}, expected)
+
+    def test_player_pr_history_is_michigan_only(self):
+        seasons, summary = _journey_pr_history(self.player)
+        self.assertEqual([s['name'] for s in seasons], ['2025 MI'])
+        self.assertEqual(summary['appearances'], 1)
+
+    def test_analytics_h2h_ranks_are_michigan_only(self):
+        resp = self.client.get(reverse('analytics_h2h'), {'p1': self.player.id, 'p2': self.other.id})
+        self.assertEqual(resp.context['p1_stats']['current_pr'].rank, '5')
+        self.assertEqual(resp.context['p1_stats']['best_rank'], 5)
+
+    def test_national_season_cannot_be_active(self):
+        self.national.is_active = True
+        with self.assertRaises(_ValidationError):
+            self.national.full_clean()
+
+    def test_label_uses_latest_year_end_list_not_summer(self):
+        self.assertEqual(_national_rank_labels([self.player.id]),
+                         {self.player.id: '#20 SSBMRank 2025'})
+
+    def test_label_shows_in_pr_view_only_and_replaces_typed_rank(self):
+        tournament = Tournament.objects.create(id=1, name='T', date=_dt.date(2025, 2, 1), pr_season=self.mi)
+        Set.objects.create(id=1, player1=self.other, player2=self.player, player1_score=2,
+                           player2_score=0, winner_id=self.other.id, tournament=tournament)
+        url = reverse('player_detail', args=[self.other.id])
+        headers = {'HX-Request': 'true'}
+        # tournament_results is an unmanaged table with no test schema.
+        with _mock.patch('main.views.TournamentResults'):
+            pr_view = self.client.get(url, {'pr_view': 'on'}, headers=headers)
+            normal = self.client.get(url, headers=headers)
+        self.assertContains(pr_view, '#20 SSBMRank 2025')
+        self.assertEqual(pr_view.context['opponents'][0]['opponent_name'], 'Ossify')
+        self.assertNotContains(normal, '#20 SSBMRank 2025')
+
+    def test_merge_moves_ranking_rows_and_keeps_main_accounts_placement(self):
+        duplicate = Player.objects.create(name='Ossify')
+        RankingListEntry.objects.create(pr_season=self.national, player=duplicate, source_tag='Ossify', rank='20')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=duplicate, rank='9')
+        other_season = PRSeason.objects.create(name='Old', region_code_id=MICHIGAN_REGION_CODE)
+        PRSeasonResult.objects.create(pr_season=other_season, player=duplicate, rank='3')
+
+        # tournament_results is an unmanaged table with no test schema.
+        with _mock.patch('main.views.TournamentResults'):
+            merge_accounts(self.player.id, duplicate.id)
+
+        self.assertEqual(RankingListEntry.objects.get(source_tag='Ossify').player_id, self.player.id)
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=self.mi, player=self.player).rank, '5')
+        self.assertEqual(PRSeasonResult.objects.get(pr_season=other_season).player_id, self.player.id)

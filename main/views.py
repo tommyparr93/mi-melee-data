@@ -6,7 +6,10 @@ from django.http import HttpResponse
 from django.core.paginator import Paginator
 from django.core.serializers.json import DjangoJSONEncoder
 from django.shortcuts import render, get_object_or_404
-from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
+from .models import (
+    Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult, RankingListEntry,
+    MICHIGAN_REGION_CODE, NATIONAL_REGION_CODE,
+)
 from .forms import TournamentForm, PRSeasonForm, DuplicatePlayer, ConfirmMergeForm, PRSeasonResultForm
 from .data_entry import enter_tournament, enter_pr_csv, enter_pr_season
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
@@ -303,6 +306,13 @@ def merge_accounts(main_account, duplicate_account):
         # Update tournament results
         TournamentResults.objects.filter(player_id=duplicate_account).update(player_id=main_account)
 
+        # Move PR placements and ranking-list rows; a season the main account is
+        # already on keeps its existing placement.
+        RankingListEntry.objects.filter(player_id=duplicate_account).update(player_id=main_account)
+        taken = PRSeasonResult.objects.filter(player_id=main_account).values('pr_season_id')
+        PRSeasonResult.objects.filter(player_id=duplicate_account).exclude(
+            pr_season_id__in=taken).update(player_id=main_account)
+
         # Delete the old player record
         Player.objects.filter(id=duplicate_account).delete()
 
@@ -454,7 +464,8 @@ class TournamentListView(generic.ListView):
 
         # Getting distinct PRSeasons related to the displayed tournaments
         all_pr_season_ids = Tournament.objects.values_list('pr_season', flat=True).distinct()
-        all_pr_seasons = PRSeason.objects.filter(id__in=all_pr_season_ids).order_by('-end_date')
+        all_pr_seasons = PRSeason.objects.filter(
+            id__in=all_pr_season_ids, region_code_id=MICHIGAN_REGION_CODE).order_by('-end_date')
 
         # Add pr_seasons to context
         context['pr_seasons'] = all_pr_seasons
@@ -559,6 +570,12 @@ class PlayerDetailView(DetailView):
         # Sorting logic (Notable players first)
         pr_view = self.request.GET.get('pr_view')
         if pr_view:
+            labels = _national_rank_labels([row['opponent'].id for row in h2h_list])
+            for row in h2h_list:
+                row['national_label'] = labels.get(row['opponent'].id)
+                # The label replaces any hand-typed rank in the stored name.
+                row['opponent_name'] = (_clean_player_tag(row['opponent'].name)
+                                        if row['national_label'] else row['opponent'].name)
             h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], (x['opponent'].name or '').lower()))
             context['pr_view'] = True
         else:
@@ -608,6 +625,10 @@ class PlayerDetailView(DetailView):
 class PrSeasonDetailView(DetailView):
     model = PRSeason
     template_name = 'main/pr_season_detail.html'
+
+    def get_queryset(self):
+        # The public season pages are Michigan only.
+        return super().get_queryset().filter(region_code_id=MICHIGAN_REGION_CODE)
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -875,8 +896,8 @@ class PRSeasonListView(LoginRequiredMixin, UserPassesTestMixin, ListView):
             # Only Region 7
             return queryset.filter(region_code_id=7)
         else:
-            # Everything except Region 7
-            return queryset.exclude(region_code_id=7)
+            # Other regions; national lists stay out of the season pages.
+            return queryset.exclude(region_code_id__in=[MICHIGAN_REGION_CODE, NATIONAL_REGION_CODE])
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -932,14 +953,26 @@ def _sorted_season_results(season):
     return sorted(results, key=_rank_sort_key)
 
 
-# Some players carry an imported "(#20, SSBM Rank 2025)" suffix in their stored
-# name. It's noise on a rankings page, so strip it for display only.
-_TAG_ANNOTATION = re.compile(r'\s*\(#\d+,\s*SSBM Rank\s*\d{4}\)\s*$')
+# Some players carry a hand-typed national rank in their stored name, such as
+# "(#20, SSBM Rank 2025)". It's noise on a rankings page, so strip it for display only.
+_TAG_ANNOTATION = re.compile(r'\s*\((?:#\d+,\s*SSBM\s*(?:Rank|Summer)\s*\d{4}|SSBMRank\s*\d{4}\s*#\d+)\)\s*$')
 
 
 def _clean_player_tag(name):
     cleaned = _TAG_ANNOTATION.sub('', name or '').strip()
     return cleaned or (name or '')
+
+
+def _national_rank_labels(player_ids):
+    """{player_id: '#20 SSBMRank 2025'} from each player's latest year-end list.
+    Summer lists are shorter and stored for reference, so they don't set the label."""
+    results = (PRSeasonResult.objects
+               .filter(player_id__in=player_ids, pr_season__region_code_id=NATIONAL_REGION_CODE)
+               .exclude(pr_season__name__icontains='summer')
+               .select_related('pr_season')
+               .order_by('pr_season__end_date', 'pr_season_id'))
+    return {r.player_id: f'#{r.rank.strip()} {r.pr_season.name}'
+            for r in results if r.rank.strip().isdigit()}
 
 
 def _season_page_context(season, results):
@@ -1093,7 +1126,6 @@ class PRSeasonUpdateView(LoginRequiredMixin, UserPassesTestMixin, UpdateView):
 
 MIN_SETS_FOR_WIN_RATE = 10
 TOP_N_PLAYERS = 15
-MICHIGAN_REGION_CODE = 7
 
 
 def _parse_int_param(request, name, default=None):
@@ -1463,8 +1495,10 @@ class AnalyticsH2HView(generic.TemplateView):
             w = sum(1 for s in sets if s.winner_id == player.id)
             tourneys = len({s.tournament_id for s in sets if s.tournament_id})
             wr = round((w / total) * 100, 1) if total > 0 else 0
-            pr = PRSeasonResult.objects.filter(player=player).order_by('rank').first()
-            best_pr = PRSeasonResult.objects.filter(player=player).values_list('rank', flat=True)
+            michigan_prs = PRSeasonResult.objects.filter(
+                player=player, pr_season__region_code_id=MICHIGAN_REGION_CODE)
+            pr = michigan_prs.order_by('rank').first()
+            best_pr = michigan_prs.values_list('rank', flat=True)
             best_rank = min((int(r) for r in best_pr if r and str(r).isdigit()), default=None)
             return {'wins': w, 'losses': total - w, 'win_rate': wr, 'total': total,
                     'tournaments': tourneys, 'current_pr': pr, 'best_rank': best_rank}
@@ -1679,7 +1713,9 @@ def _journey_pr_history(player):
     """A player's PR seasons (oldest first) plus a summary for the PR tracker:
     latest and best placement, how many seasons they were ranked, etc."""
     import datetime
-    rows = list(PRSeasonResult.objects.filter(player_id=player.id).select_related('pr_season'))
+    rows = list(PRSeasonResult.objects.filter(
+        player_id=player.id, pr_season__region_code_id=MICHIGAN_REGION_CODE,
+    ).select_related('pr_season'))
     if not rows:
         return [], None
     rows.sort(key=lambda r: (r.pr_season.start_date or datetime.date.min, r.pr_season_id))

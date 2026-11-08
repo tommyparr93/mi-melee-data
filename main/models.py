@@ -178,6 +178,11 @@ class Set(models.Model):
         db_table = 'set'
 
 
+# Region ids are assigned by hand (Region.id is not an auto-increment column).
+MICHIGAN_REGION_CODE = 7
+NATIONAL_REGION_CODE = 100
+
+
 class PRSeason(models.Model):
     name = models.CharField(max_length=255)
     start_date = models.DateField(null=True, blank=True)
@@ -197,6 +202,14 @@ class PRSeason(models.Model):
 
     class Meta:
         db_table = 'pr_season'
+        constraints = [
+            # Several views pick "the" active season with .filter(is_active=True).first().
+            models.CheckConstraint(
+                condition=~models.Q(is_active=True, region_code=NATIONAL_REGION_CODE),
+                name='pr_season_national_never_active',
+                violation_error_message='A National season cannot be the active season.',
+            ),
+        ]
 
 
 class PRSeasonResult(models.Model):
@@ -208,6 +221,30 @@ class PRSeasonResult(models.Model):
     class Meta:
         db_table = 'pr_season_results'
         unique_together = ('player', 'pr_season',)
+
+
+class RankingListEntry(models.Model):
+    """One row of a published ranking list, exactly as the source printed it.
+
+    Every row is kept, including players we can't find in the database (player
+    is null). PRSeasonResult only holds the rows that matched a player.
+    """
+    pr_season = models.ForeignKey(PRSeason, on_delete=models.CASCADE, related_name='ranking_entries')
+    player = models.ForeignKey(Player, on_delete=models.SET_NULL, null=True, blank=True,
+                               related_name='ranking_entries')
+    source_tag = models.CharField(max_length=255)
+    rank = models.CharField(max_length=20)
+    previous_rank = models.CharField(max_length=20, blank=True, default='')
+    score = models.FloatField(null=True, blank=True)
+    # The full source row (wikitext or CSV), so no value on the list is lost.
+    raw_row = models.TextField(blank=True, default='')
+
+    def __str__(self):
+        return f'{self.rank} {self.source_tag} ({self.pr_season})'
+
+    class Meta:
+        db_table = 'ranking_list_entry'
+        unique_together = ('pr_season', 'source_tag',)
 
 
 class Tournament(models.Model):

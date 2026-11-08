@@ -7,7 +7,7 @@ import re
 
 import requests
 
-from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult
+from .models import Player, Set, Tournament, TournamentResults, PRSeason, PRSeasonResult, MICHIGAN_REGION_CODE
 from django.db import models
 from django.http import HttpResponseRedirect
 from django.core.files.uploadedfile import InMemoryUploadedFile
@@ -81,6 +81,14 @@ def exists(model: models.Model, pk) -> bool:
 
     entries = model.objects.filter(id=pk)
     return True if entries else False
+
+
+def michigan_season_for_date(date):
+    """The Michigan PR season covering a date. National and other regional lists
+    also have date ranges, but tournaments never belong to them."""
+    return PRSeason.objects.filter(
+        start_date__lte=date, end_date__gte=date, region_code_id=MICHIGAN_REGION_CODE,
+    ).first()
 
 
 def enter_pr_csv(pr_csv: InMemoryUploadedFile, pr_season: PRSeason):
@@ -249,7 +257,7 @@ def enter_tournament(tournament_url: str, is_pr_eligible: bool = True, player_li
     # Database Transaction
     print(f"Opening database transaction for {tournament_slug}...")
     with transaction.atomic():
-        pr_season = PRSeason.objects.filter(start_date__lte=t_date, end_date__gte=t_date).first()
+        pr_season = michigan_season_for_date(t_date)
         
         # Create tournament
         Tournament.objects.create(

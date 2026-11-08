@@ -18,11 +18,12 @@
       <td>
         <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
           {% if pr_view and opponent.opponent.pr_notable %}
-            <strong>{{ opponent.opponent.name }}</strong>
+            <strong>{{ opponent.opponent_name }}</strong>
           {% else %}
-            {{ opponent.opponent.name }}
+            {{ opponent.opponent_name|default:opponent.opponent.name }}
           {% endif %}
         </a>
+        {% if opponent.national_label %}<small class="text-muted ms-1">{{ opponent.national_label }}</small>{% endif %}
       </td>
       <td> {{opponent.wins }} </td>
       <td> {{opponent.losses }} </td>
