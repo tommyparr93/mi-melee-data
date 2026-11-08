@@ -19,8 +19,9 @@
             linear-gradient(135deg, #1e293b 0%, #0f172a 70%);
         color: #fff;
         border-radius: 14px;
-        padding: 1.75rem 2rem;
-        margin-bottom: 1.25rem;
+        padding: 0.5rem 1rem;
+        margin-top: 0.75rem;
+        margin-bottom: 0.75rem;
         box-shadow: 0 10px 30px -10px rgba(15,23,42,0.45);
     }
     .journey-hero::before {
@@ -36,24 +37,25 @@
         overflow: hidden;
     }
     .journey-hero > * { position: relative; }
-    .journey-hero .hero-eyebrow {
-        display: inline-block; font-size: 0.7rem; font-weight: 700;
-        text-transform: uppercase; letter-spacing: 1.2px;
-        color: #93c5fd;
-        background: rgba(59,130,246,0.12);
-        border: 1px solid rgba(147,197,253,0.25);
-        padding: 0.25rem 0.7rem; border-radius: 999px;
-        margin-bottom: 0.55rem;
-    }
     .journey-hero h1 {
-        font-weight: 800; letter-spacing: -1px; margin: 0;
+        font-size: 1.15rem; font-weight: 800; margin: 0; white-space: nowrap;
         background: linear-gradient(90deg, #fff 0%, #cbd5f5 100%);
         -webkit-background-clip: text; background-clip: text;
         -webkit-text-fill-color: transparent;
     }
-    .journey-hero .hero-subtitle { color: #cbd5e1; opacity: 0.85; font-size: 0.95rem; margin-top: 0.25rem; }
+    .journey-bar { display: flex; align-items: center; gap: 0.5rem 1rem; flex-wrap: wrap; }
 
-    .journey-search-wrap { position: relative; }
+    .journey-search-wrap { position: relative; flex: 1 1 220px; }
+    .journey-description { display: none; }
+
+    /* Landing state: shown until a player is picked, then loadJourney() removes it. */
+    .journey-hero.is-landing { padding: 4.5rem 1.5rem; min-height: 55vh; display: flex; align-items: center; justify-content: center; }
+    .journey-hero.is-landing .journey-bar { flex-direction: column; flex-wrap: nowrap; text-align: center; width: 100%; gap: 1rem; }
+    .journey-hero.is-landing h1 { font-size: 2.75rem; letter-spacing: -1px; white-space: normal; }
+    .journey-hero.is-landing .journey-description { display: block; color: #cbd5e1; font-size: 1.05rem; max-width: 560px; margin: 0; }
+    .journey-hero.is-landing .journey-search-wrap { flex: none; width: min(560px, 100%); text-align: left; }
+    .journey-hero.is-landing #journey-search { font-size: 1.1rem; padding: 0.7rem 1rem; }
+    .journey-hero.is-landing .home-base-bar { display: none; }
     #journey-search {
         background: rgba(255,255,255,0.08);
         color: #fff;
@@ -239,18 +241,16 @@
 
     /* Home base control */
     .home-base-bar {
-        display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;
-        margin-top: 1rem; padding-top: 1rem;
-        border-top: 1px solid rgba(255,255,255,0.12);
+        display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap;
     }
     .home-base-bar .hb-label {
         font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: 0.8px; color: #93c5fd;
     }
     .home-base-bar input {
-        width: 130px; background: rgba(255,255,255,0.08); color: #fff;
+        width: 100px; background: rgba(255,255,255,0.08); color: #fff;
         border: 1px solid rgba(255,255,255,0.18); border-radius: 8px;
-        padding: 0.35rem 0.7rem; font-size: 0.9rem;
+        padding: 0.2rem 0.6rem; font-size: 0.85rem;
     }
     .home-base-bar input::placeholder { color: rgba(226,232,240,0.5); }
     .home-base-bar input:focus {
@@ -258,7 +258,7 @@
         border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96,165,250,0.3);
     }
     .home-base-bar .btn-hb {
-        font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.9rem;
+        font-size: 0.8rem; font-weight: 600; padding: 0.25rem 0.7rem;
         border-radius: 8px; border: 1px solid rgba(255,255,255,0.25);
         background: rgba(255,255,255,0.1); color: #fff; cursor: pointer;
         transition: all 0.15s ease;
@@ -266,7 +266,8 @@
     .home-base-bar .btn-hb:hover { background: rgba(255,255,255,0.2); }
     .home-base-bar .btn-hb.solid { background: #2563eb; border-color: #2563eb; }
     .home-base-bar .btn-hb.solid:hover { background: #1d4ed8; }
-    .home-base-status { font-size: 0.82rem; color: #cbd5e1; }
+    .home-base-status { font-size: 0.8rem; color: #cbd5e1; }
+    .home-base-status:empty { display: none; }
     .home-base-status.ok { color: #86efac; }
     .home-base-status.err { color: #fca5a5; }
 
@@ -403,50 +404,41 @@
 </style>
 
 <!-- Hero / Player picker -->
-<div class="journey-hero">
-    <div class="row align-items-center g-3">
-        <div class="col-md-6">
-            <span class="hero-eyebrow">Michigan Melee · On The Road</span>
-            <h1>Player Journey</h1>
-            <div class="hero-subtitle">An animated trip through a player's tournament history</div>
+<div class="journey-hero{% if not initial_player %} is-landing{% endif %}" id="journey-hero">
+    <div class="journey-bar">
+        <h1>Player Journey</h1>
+        <p class="journey-description">An animated trip through a player's tournament history. Search for a player to follow every in-person tournament they've attended, in order, on the map.</p>
+        <div class="journey-search-wrap">
+            <input type="text" id="journey-search" class="form-control form-control-sm"
+                   placeholder="Search a player to begin..."
+                   autocomplete="off"
+                   hx-get="{% url 'analytics_player_search' %}?num=journey"
+                   hx-trigger="keyup changed delay:250ms"
+                   hx-target="#journey-search-dropdown"
+                   hx-include="#journey-search"
+                   name="q">
+            <div id="journey-search-dropdown" class="journey-search-dropdown"></div>
         </div>
-        <div class="col-md-6">
-            <div class="journey-search-wrap">
-                <input type="text" id="journey-search" class="form-control form-control-lg"
-                       placeholder="Search a player to begin..."
-                       autocomplete="off"
-                       hx-get="{% url 'analytics_player_search' %}?num=journey"
-                       hx-trigger="keyup changed delay:250ms"
-                       hx-target="#journey-search-dropdown"
-                       hx-include="#journey-search"
-                       name="q">
-                <div id="journey-search-dropdown" class="journey-search-dropdown"></div>
-            </div>
+        <div class="home-base-bar" title="Optional: show round trips from a home location to every event.">
+            <span class="hb-label">Home Base</span>
+            <input type="text" id="home-zip" inputmode="numeric" maxlength="10"
+                   placeholder="Zip code" autocomplete="off"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();applyHomeZip();}">
+            <button type="button" class="btn-hb solid" onclick="applyHomeZip()">Set</button>
+            <button type="button" class="btn-hb" id="home-clear-btn" onclick="clearHome()" style="display:none;">Clear</button>
+            <span class="home-base-status" id="home-status"></span>
         </div>
-    </div>
-    <div class="home-base-bar">
-        <span class="hb-label">Home Base</span>
-        <input type="text" id="home-zip" inputmode="numeric" maxlength="10"
-               placeholder="Zip code" autocomplete="off"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();applyHomeZip();}">
-        <button type="button" class="btn-hb solid" onclick="applyHomeZip()">Set home</button>
-        <button type="button" class="btn-hb" id="home-clear-btn" onclick="clearHome()" style="display:none;">Clear</button>
-        <span class="home-base-status" id="home-status">Optional — show round trips from a home location to every event.</span>
     </div>
 </div>
 
 <!-- Loaded via HTMX when a player is selected -->
-<div id="journey-content">
-    <div class="text-center text-muted py-5">
-        <p class="fs-5 mb-1">Search for a player above to start their journey.</p>
-        <small>The map will plot every in-person tournament they've attended in chronological order.</small>
-    </div>
-</div>
+<div id="journey-content"></div>
 
 <script>
 // Load (or reload) a journey, optionally narrowed to one year, and keep the
 // address bar in sync so any journey can be bookmarked or shared as a link.
 function loadJourney(id, year) {
+    document.getElementById('journey-hero').classList.remove('is-landing');
     let url = '{% url "journey_data" %}?player=' + id;
     let shareUrl = '{% url "journey" %}?player=' + id;
     if (year) { url += '&year=' + year; shareUrl += '&year=' + year; }
@@ -487,7 +479,7 @@ function applyHomeZip() {
             if (!d.ok) { setHomeStatus(d.error || 'Could not find that zip.', 'err'); return; }
             window.journeyHome = { lat: d.lat, lng: d.lng, label: d.label, zip: d.zip };
             const short = (d.label || '').split(',').slice(0, 2).join(',').trim() || ('Zip ' + d.zip);
-            setHomeStatus('Home set: ' + short + ' — routes now round-trip from here.', 'ok');
+            setHomeStatus('Home: ' + short, 'ok');
             document.getElementById('home-clear-btn').style.display = '';
             if (window.journeyApplyHome) window.journeyApplyHome();
         })
@@ -498,7 +490,7 @@ function clearHome() {
     window.journeyHome = null;
     document.getElementById('home-zip').value = '';
     document.getElementById('home-clear-btn').style.display = 'none';
-    setHomeStatus('Optional — show round trips from a home location to every event.');
+    setHomeStatus('');
     if (window.journeyApplyHome) window.journeyApplyHome();
 }
 </script>

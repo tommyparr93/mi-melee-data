@@ -1584,3 +1584,16 @@ class FillMichiganRegionsMigrationTests(TestCase):
 
         regions = dict(Tournament.objects.values_list('id', 'region_code_id'))
         self.assertEqual(regions, {1: MICHIGAN_REGION_CODE, 2: None, 3: 10, 4: None})
+
+
+class JourneyLandingTests(TestCase):
+    def test_starts_as_a_landing_page_with_a_description(self):
+        resp = self.client.get(reverse('journey'))
+        self.assertContains(resp, 'class="journey-hero is-landing"')
+        self.assertContains(resp, "An animated trip through a player's tournament history", html=False)
+
+    def test_a_link_to_a_player_skips_the_landing_page(self):
+        player = Player.objects.create(name='Ana')
+        resp = self.client.get(reverse('journey'), {'player': player.id})
+        self.assertContains(resp, 'class="journey-hero"')
+        self.assertNotContains(resp, 'class="journey-hero is-landing"')
