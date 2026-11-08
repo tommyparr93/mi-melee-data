@@ -1,3 +1,4 @@
+{% load pr_badges %}
 <!-- Player Picker + Season Filter -->
 <div class="card shadow-sm mb-4">
     <div class="card-body">
@@ -107,8 +108,9 @@
                     {% if p1.main_char and p1.main_char.icon_path %}
                     <img src="{{ p1.main_char.icon_path }}" alt="{{ p1.main_char.name }}" style="width:48px; height:48px; object-fit:contain;">
                     {% endif %}
-                    <h3 class="fw-bold text-primary mb-0">{{ p1.name }}</h3>
+                    <h3 class="fw-bold text-primary mb-0">{{ p1.name|clean_tag }}</h3>
                 </a>
+                <div>{% pr_badges p1 %}</div>
             </div>
             <div class="col-auto">
                 <div class="display-5 fw-bold">
@@ -123,8 +125,9 @@
                     {% if p2.main_char and p2.main_char.icon_path %}
                     <img src="{{ p2.main_char.icon_path }}" alt="{{ p2.main_char.name }}" style="width:48px; height:48px; object-fit:contain;">
                     {% endif %}
-                    <h3 class="fw-bold text-primary mb-0">{{ p2.name }}</h3>
+                    <h3 class="fw-bold text-primary mb-0">{{ p2.name|clean_tag }}</h3>
                 </a>
+                <div>{% pr_badges p2 %}</div>
             </div>
         </div>
         {% if direct_total > 0 %}

@@ -570,12 +570,6 @@ class PlayerDetailView(DetailView):
         # Sorting logic (Notable players first)
         pr_view = self.request.GET.get('pr_view')
         if pr_view:
-            labels = _national_rank_labels([row['opponent'].id for row in h2h_list])
-            for row in h2h_list:
-                row['national_label'] = labels.get(row['opponent'].id)
-                # The label replaces any hand-typed rank in the stored name.
-                row['opponent_name'] = (_clean_player_tag(row['opponent'].name)
-                                        if row['national_label'] else row['opponent'].name)
             h2h_list = sorted(h2h_list, key=lambda x: (-x['pr_notable'], (x['opponent'].name or '').lower()))
             context['pr_view'] = True
         else:
@@ -961,18 +955,6 @@ _TAG_ANNOTATION = re.compile(r'\s*\((?:#\d+,\s*SSBM\s*(?:Rank|Summer)\s*\d{4}|SS
 def _clean_player_tag(name):
     cleaned = _TAG_ANNOTATION.sub('', name or '').strip()
     return cleaned or (name or '')
-
-
-def _national_rank_labels(player_ids):
-    """{player_id: '#20 SSBMRank 2025'} from each player's latest year-end list.
-    Summer lists are shorter and stored for reference, so they don't set the label."""
-    results = (PRSeasonResult.objects
-               .filter(player_id__in=player_ids, pr_season__region_code_id=NATIONAL_REGION_CODE)
-               .exclude(pr_season__name__icontains='summer')
-               .select_related('pr_season')
-               .order_by('pr_season__end_date', 'pr_season_id'))
-    return {r.player_id: f'#{r.rank.strip()} {r.pr_season.name}'
-            for r in results if r.rank.strip().isdigit()}
 
 
 def _season_page_context(season, results):

@@ -1,3 +1,4 @@
+{% load pr_badges %}
 <h2>H2H</h2>
 <table class="table table-light">
   <thead>
@@ -18,12 +19,12 @@
       <td>
         <a href="{% url 'player_detail' opponent.opponent.id %}?pr_season={{ request.GET.pr_season }}&pr_view={{ request.GET.pr_view }}">
           {% if pr_view and opponent.opponent.pr_notable %}
-            <strong>{{ opponent.opponent_name }}</strong>
+            <strong>{{ opponent.opponent.name|clean_tag }}</strong>
           {% else %}
-            {{ opponent.opponent_name|default:opponent.opponent.name }}
+            {{ opponent.opponent.name|clean_tag }}
           {% endif %}
         </a>
-        {% if opponent.national_label %}<small class="text-muted ms-1">{{ opponent.national_label }}</small>{% endif %}
+        {% pr_badges opponent.opponent %}
       </td>
       <td> {{opponent.wins }} </td>
       <td> {{opponent.losses }} </td>

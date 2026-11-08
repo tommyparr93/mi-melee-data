@@ -998,10 +998,12 @@ class AdminToolAccessTests(TestCase):
 
 from django.contrib.auth import get_user_model as _get_user_model
 from django.core.exceptions import ValidationError as _ValidationError
+from django.template import Template, Context
 from django.core.management.base import CommandError as _CommandError
 from main.models import RankingListEntry, NATIONAL_REGION_CODE, MICHIGAN_REGION_CODE
 from main.data_entry import michigan_season_for_date
-from main.views import merge_accounts, _national_rank_labels
+from main.views import merge_accounts
+from main.templatetags.pr_badges import build_badge_map
 from main.management.commands.import_pr_season import parse_wiki_rows, parse_wiki_period
 
 
@@ -1187,11 +1189,33 @@ class NationalSeasonIsolationTests(TestCase):
         with self.assertRaises(_ValidationError):
             self.national.full_clean()
 
-    def test_label_uses_latest_year_end_list_not_summer(self):
-        self.assertEqual(_national_rank_labels([self.player.id]),
-                         {self.player.id: '#20 SSBMRank 2025'})
+    def test_badges_show_latest_michigan_and_year_end_national_placement(self):
+        badges = build_badge_map()[self.player.id]
+        self.assertEqual([b['text'] for b in badges], ['MI #5', '#20 SSBMRank 2025'])
+        self.assertTrue(all(b['current'] for b in badges))
 
-    def test_label_shows_in_pr_view_only_and_replaces_typed_rank(self):
+    def test_older_placement_is_marked_not_current(self):
+        newer = PRSeason.objects.create(
+            name='2026 MI', region_code_id=MICHIGAN_REGION_CODE, start_date=_dt.date(2026, 1, 1))
+        PRSeasonResult.objects.create(pr_season=newer, player=self.other, rank='HM')
+        badges = build_badge_map()
+        self.assertFalse(badges[self.player.id][0]['current'])
+        self.assertEqual(badges[self.other.id][0]['text'], 'MI HM')
+        self.assertTrue(badges[self.other.id][0]['current'])
+
+    def test_other_regions_do_not_get_badges(self):
+        indiana = PRSeason.objects.create(name='Indiana', region_code_id=None)
+        PRSeasonResult.objects.create(pr_season=indiana, player=self.other, rank='1')
+        self.assertNotIn(self.other.id, build_badge_map())
+
+    def test_badge_lookup_runs_once_per_request(self):
+        request = _NS()
+        template = Template('{% load pr_badges %}{% pr_badges a %}{% pr_badges a %}{% pr_badges b %}')
+        with self.assertNumQueries(1):
+            html = template.render(Context({'request': request, 'a': self.player, 'b': self.other}))
+        self.assertEqual(html.count('#20 SSBMRank 2025'), 2)
+
+    def test_badges_replace_typed_rank_on_the_h2h_list(self):
         tournament = Tournament.objects.create(id=1, name='T', date=_dt.date(2025, 2, 1), pr_season=self.mi)
         Set.objects.create(id=1, player1=self.other, player2=self.player, player1_score=2,
                            player2_score=0, winner_id=self.other.id, tournament=tournament)
@@ -1199,11 +1223,10 @@ class NationalSeasonIsolationTests(TestCase):
         headers = {'HX-Request': 'true'}
         # tournament_results is an unmanaged table with no test schema.
         with _mock.patch('main.views.TournamentResults'):
-            pr_view = self.client.get(url, {'pr_view': 'on'}, headers=headers)
             normal = self.client.get(url, headers=headers)
-        self.assertContains(pr_view, '#20 SSBMRank 2025')
-        self.assertEqual(pr_view.context['opponents'][0]['opponent_name'], 'Ossify')
-        self.assertNotContains(normal, '#20 SSBMRank 2025')
+        self.assertContains(normal, 'MI #5')
+        self.assertContains(normal, '#20 SSBMRank 2025')
+        self.assertRegex(normal.content.decode(), r'>\s*Ossify\s*</a>')
 
     def test_merge_moves_ranking_rows_and_keeps_main_accounts_placement(self):
         duplicate = Player.objects.create(name='Ossify')

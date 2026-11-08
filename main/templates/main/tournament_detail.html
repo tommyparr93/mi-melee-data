@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load pr_badges %}
 {% block title %}Tournament Details{% endblock %}
 {% block content %}
   <h1>{{ tournament.name }}</h1>
@@ -27,8 +28,8 @@
     <tbody>
       {% for set in sets %}
         <tr>
-          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name }}</a></td>
-          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name }}</a></td>
+          <td><a href="{% url 'player_detail' set.player1.id %}">{{ set.player1.name|clean_tag }}</a>{% pr_badges set.player1 %}</td>
+          <td><a href="{% url 'player_detail' set.player2.id %}">{{ set.player2.name|clean_tag }}</a>{% pr_badges set.player2 %}</td>
           <td>{{ set.player1_score }}</td>
           <td>{{ set.player2_score }}</td>
           <td>{{ set.location }}</td>
@@ -49,7 +50,7 @@
       {% for result in results %}
         <tr>
           <td>{{ result.placement }}</td>
-          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id.name }}</a></td>
+          <td><a href="{% url 'player_detail' result.player_id.id %}">{{ result.player_id.name|clean_tag }}</a>{% pr_badges result.player_id %}</td>
         </tr>
       {% empty %}
         <tr>

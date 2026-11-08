@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load pr_badges %}
 {% block title %}Search Results - Melee PR Tracker{% endblock %}
 
 {% block content %}
@@ -17,7 +18,7 @@
                         <div class="list-group list-group-flush">
                             {% for player in players %}
                                 <a href="{% url 'player_detail' player.pk %}" class="list-group-item list-group-item-action d-flex justify-content-between align-items-center">
-                                    <span><strong>{{ player.name }}</strong></span>
+                                    <span><strong>{{ player.name|clean_tag }}</strong>{% pr_badges player %}</span>
                                     <div class="d-flex gap-1">
                                         {% if player.region_code %}
                                             <span class="badge bg-info text-dark">{{ player.region_code.name }}</span>

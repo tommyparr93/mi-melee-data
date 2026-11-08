@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% load pr_badges %}
 {% block title %}PR Eligible Players{% endblock %}
 
 {% block content %}
@@ -32,8 +33,9 @@
                 <tr class="text-center">
                     <td class="text-start">
                         <a href="{% url 'player_detail' player.pk %}?pr_view=on&pr_season={{ active_season_id }}" class="text-decoration-none fw-bold">
-                            {{ player.name }}
+                            {{ player.name|clean_tag }}
                         </a>
+                        {% pr_badges player %}
                     </td>
 
                     <td class="fw-bold text-primary">{{ player.mi_tournies }}</td>
