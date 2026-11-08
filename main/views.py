@@ -690,6 +690,15 @@ class PlayerDetailView(DetailView):
         context['calculations'] = player_detail_calculations(player, all_sets)
         context['pr_standing'] = _player_pr_standing(player)
 
+        # Attendance by location, for whatever season filter is applied.
+        tournament_regions = {s.tournament_id: s.tournament.region_code_id for s in all_sets if s.tournament_id}
+        michigan = sum(1 for region in tournament_regions.values() if region == MICHIGAN_REGION_CODE)
+        context['attendance'] = {
+            'michigan': michigan,
+            'out_of_state': len(tournament_regions) - michigan,
+            'total': len(tournament_regions),
+        }
+
         return context
 
 

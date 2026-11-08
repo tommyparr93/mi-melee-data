@@ -1537,3 +1537,50 @@ class PlayerStartggLinkTests(TournamentPagesTestBase):
     def test_backfill_dry_run_saves_nothing(self):
         self._backfill('--dry-run')
         self.assertIsNone(Player.objects.get(id=1).startgg_slug)
+
+
+import importlib as _importlib
+from django.apps import apps as _apps
+
+
+class AttendanceBreakdownTests(TestCase):
+    def setUp(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=10, name='Out of State')
+        self.player = Player.objects.create(name='Ana')
+        self.other = Player.objects.create(name='Ben')
+        self.season = PRSeason.objects.create(name='S', region_code_id=MICHIGAN_REGION_CODE)
+        regions = [MICHIGAN_REGION_CODE, MICHIGAN_REGION_CODE, 10, None]
+        for i, region in enumerate(regions, start=1):
+            tournament = Tournament.objects.create(
+                id=i, name=f'T{i}', date=_dt.date(2025, 1, i), region_code_id=region,
+                pr_season=self.season if i == 1 else None)
+            Set.objects.create(id=i * 10, player1=self.player, player2=self.other, player1_score=2,
+                               player2_score=0, winner_id=self.player.id, tournament=tournament)
+
+    def attendance(self, **params):
+        with _mock.patch('main.views.TournamentResults'):
+            return self.client.get(reverse('player_detail', args=[self.player.id]), params).context['attendance']
+
+    def test_splits_michigan_from_everything_else(self):
+        self.assertEqual(self.attendance(), {'michigan': 2, 'out_of_state': 2, 'total': 4})
+
+    def test_follows_the_season_filter(self):
+        self.assertEqual(self.attendance(pr_season=self.season.id),
+                         {'michigan': 1, 'out_of_state': 0, 'total': 1})
+
+
+class FillMichiganRegionsMigrationTests(TestCase):
+    def test_fills_only_blank_regions_with_a_michigan_state(self):
+        _Region.objects.create(id=MICHIGAN_REGION_CODE, name='Michigan')
+        _Region.objects.create(id=10, name='Out of State')
+        Tournament.objects.create(id=1, name='Blank MI', state='MI')
+        Tournament.objects.create(id=2, name='Blank OH', state='OH')
+        Tournament.objects.create(id=3, name='Set elsewhere', state='MI', region_code_id=10)
+        Tournament.objects.create(id=4, name='No state')
+
+        migration = _importlib.import_module('main.migrations.0052_fill_michigan_tournament_regions')
+        migration.fill_michigan_regions(_apps, None)
+
+        regions = dict(Tournament.objects.values_list('id', 'region_code_id'))
+        self.assertEqual(regions, {1: MICHIGAN_REGION_CODE, 2: None, 3: 10, 4: None})
