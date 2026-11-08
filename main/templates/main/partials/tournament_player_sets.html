@@ -1,0 +1,21 @@
+<table class="table table-sm mb-0 tournament-sets">
+    <tbody>
+        {% for row in rows %}
+        <tr>
+            <td class="set-result">
+                {% if row.result == 'W' %}<span class="badge bg-success">W</span>
+                {% elif row.result == 'L' %}<span class="badge bg-danger">L</span>
+                {% elif row.result == 'DQ' %}<span class="badge bg-secondary">DQ</span>{% endif %}
+            </td>
+            <td class="set-score">{% if row.score %}{{ row.score }}{% else %}<span class="text-muted">&mdash;</span>{% endif %}</td>
+            <td>
+                {% if row.opponent %}<a href="{% url 'player_detail' row.opponent.id %}">{{ row.opponent.name }}</a>{% else %}<span class="text-muted">Unknown</span>{% endif %}
+            </td>
+            <td class="text-muted d-none d-sm-table-cell">{{ row.round }}</td>
+            {% if user.is_staff %}<td class="text-end"><a href="{% url 'admin:main_set_change' row.id %}" class="btn btn-sm btn-outline-secondary">Edit</a></td>{% endif %}
+        </tr>
+        {% empty %}
+        <tr><td class="text-muted">No sets recorded.</td></tr>
+        {% endfor %}
+    </tbody>
+</table>

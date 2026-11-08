@@ -1002,7 +1002,7 @@ from django.template import Template, Context
 from django.core.management.base import CommandError as _CommandError
 from main.models import RankingListEntry, NATIONAL_REGION_CODE, MICHIGAN_REGION_CODE
 from main.data_entry import michigan_season_for_date
-from main.views import merge_accounts
+from main.views import merge_accounts, _player_pr_standing
 from main.templatetags.pr_badges import build_badge_map
 from main.management.commands.import_pr_season import parse_wiki_rows, parse_wiki_period
 
@@ -1189,19 +1189,21 @@ class NationalSeasonIsolationTests(TestCase):
         with self.assertRaises(_ValidationError):
             self.national.full_clean()
 
-    def test_badges_show_latest_michigan_and_year_end_national_placement(self):
-        badges = build_badge_map()[self.player.id]
-        self.assertEqual([b['text'] for b in badges], ['MI #5', '#20 SSBMRank 2025'])
-        self.assertTrue(all(b['current'] for b in badges))
+    def test_one_badge_prefers_the_year_end_national_placement(self):
+        badge = build_badge_map()[self.player.id]
+        self.assertEqual(badge['text'], '#20 SSBMRank 2025')
+        self.assertTrue(badge['current'])
 
     def test_older_placement_is_marked_not_current(self):
         newer = PRSeason.objects.create(
             name='2026 MI', region_code_id=MICHIGAN_REGION_CODE, start_date=_dt.date(2026, 1, 1))
         PRSeasonResult.objects.create(pr_season=newer, player=self.other, rank='HM')
+        PRSeasonResult.objects.create(pr_season=self.mi, player=Player.objects.create(name='Old', id=900), rank='3')
         badges = build_badge_map()
-        self.assertFalse(badges[self.player.id][0]['current'])
-        self.assertEqual(badges[self.other.id][0]['text'], 'MI HM')
-        self.assertTrue(badges[self.other.id][0]['current'])
+        self.assertFalse(badges[900]['current'])
+        self.assertEqual(badges[900]['text'], 'MI #3')
+        self.assertEqual(badges[self.other.id]['text'], 'MI HM')
+        self.assertTrue(badges[self.other.id]['current'])
 
     def test_other_regions_do_not_get_badges(self):
         indiana = PRSeason.objects.create(name='Indiana', region_code_id=None)
@@ -1224,9 +1226,44 @@ class NationalSeasonIsolationTests(TestCase):
         # tournament_results is an unmanaged table with no test schema.
         with _mock.patch('main.views.TournamentResults'):
             normal = self.client.get(url, headers=headers)
-        self.assertContains(normal, 'MI #5')
+        self.assertNotContains(normal, 'MI #5')
         self.assertContains(normal, '#20 SSBMRank 2025')
         self.assertRegex(normal.content.decode(), r'>\s*Ossify\s*</a>')
+
+    def test_active_season_is_not_a_completed_pr(self):
+        active = PRSeason.objects.create(name='Now', region_code_id=MICHIGAN_REGION_CODE,
+                                         start_date=_dt.date(2026, 7, 1), is_active=True)
+        PRSeasonResult.objects.create(pr_season=active, player=self.other, rank='1')
+        self.assertNotIn(self.other.id, build_badge_map())
+        self.assertEqual(_player_pr_standing(self.other), [])
+
+    def test_standing_shows_current_then_highest_for_each_list(self):
+        older_mi = PRSeason.objects.create(name='2024 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                           start_date=_dt.date(2024, 1, 1))
+        PRSeasonResult.objects.create(pr_season=older_mi, player=self.player, rank='2')
+        older_national = PRSeason.objects.create(name='SSBMRank 2023', region_code_id=NATIONAL_REGION_CODE,
+                                                 start_date=_dt.date(2022, 12, 19))
+        PRSeasonResult.objects.create(pr_season=older_national, player=self.player, rank='35')
+        standing = [(s['heading'], s['rank'], s['season']) for s in _player_pr_standing(self.player)]
+        self.assertEqual(standing, [
+            ('Current MI PR', '#5', '2025 MI'),
+            ('Current National', '#20', 'SSBMRank 2025'),
+            ('Highest MI PR', '#2', '2024 MI'),
+            ('Highest National', '#20', 'SSBMRank 2025'),
+        ])
+
+    def test_not_on_the_latest_list_means_no_current_tile(self):
+        newer = PRSeason.objects.create(name='2026 MI', region_code_id=MICHIGAN_REGION_CODE,
+                                        start_date=_dt.date(2026, 1, 1))
+        PRSeasonResult.objects.create(pr_season=newer, player=self.other, rank='1')
+        headings = [s['heading'] for s in _player_pr_standing(self.player)]
+        self.assertNotIn('Current MI PR', headings)
+        self.assertIn('Highest MI PR', headings)
+
+    def test_inactive_listing_is_current_but_never_highest(self):
+        PRSeasonResult.objects.create(pr_season=self.mi, player=self.other, rank='IM')
+        standing = [(s['heading'], s['rank']) for s in _player_pr_standing(self.other)]
+        self.assertEqual(standing, [('Current MI PR', 'IM')])
 
     def test_merge_moves_ranking_rows_and_keeps_main_accounts_placement(self):
         duplicate = Player.objects.create(name='Ossify')
@@ -1242,3 +1279,239 @@ class NationalSeasonIsolationTests(TestCase):
         self.assertEqual(RankingListEntry.objects.get(source_tag='Ossify').player_id, self.player.id)
         self.assertEqual(PRSeasonResult.objects.get(pr_season=self.mi, player=self.player).rank, '5')
         self.assertEqual(PRSeasonResult.objects.get(pr_season=other_season).player_id, self.player.id)
+
+
+from django.db import connection as _connection
+from main.views import _ordinal, _round_sort_key
+from main.management.commands.backfill_event_info import build_query, clean_slug
+from main.data_entry import fetch_player_slugs
+
+
+class RoundSortKeyTests(SimpleTestCase):
+    def test_bracket_path_order(self):
+        rounds = ['Grand Final Reset', 'Losers Final', 'Winners Semi-Final', 'Grand Final',
+                  'Losers Round 2', 'Winners Round 1', 'Winners Final', 'Losers Quarter-Final']
+        self.assertEqual(sorted(rounds, key=_round_sort_key), [
+            'Winners Round 1', 'Winners Semi-Final', 'Winners Final', 'Losers Round 2',
+            'Losers Quarter-Final', 'Losers Final', 'Grand Final', 'Grand Final Reset'])
+
+    def test_missing_round_does_not_crash(self):
+        self.assertEqual(_round_sort_key(None), (1, 0, 0))
+
+    def test_ordinal(self):
+        self.assertEqual([_ordinal(n) for n in (1, 2, 3, 4, 11, 13, 21, 33)],
+                         ['1st', '2nd', '3rd', '4th', '11th', '13th', '21st', '33rd'])
+
+
+class TournamentPagesTestBase(TestCase):
+    """`tournament_results` is unmanaged, so these tests create it themselves."""
+
+    @classmethod
+    def setUpTestData(cls):
+        with _connection.cursor() as cur:
+            cur.execute('CREATE TABLE tournament_results ('
+                        'tournament_id integer, player_id integer, name varchar, placement integer)')
+        cls.michigan = _Region.objects.create(id=7, name='Michigan')
+        cls.ana = Player.objects.create(id=1, name='Ana', region_code=cls.michigan)
+        cls.bo = Player.objects.create(id=2, name='Bo')
+        cls.cy = Player.objects.create(id=3, name='Cy')
+
+    @staticmethod
+    def add_result(tournament_id, player_id, placement):
+        with _connection.cursor() as cur:
+            cur.execute('INSERT INTO tournament_results (tournament_id, player_id, placement) '
+                        'VALUES (%s, %s, %s)', [tournament_id, player_id, placement])
+
+
+class TournamentListPageTests(TournamentPagesTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.season = PRSeason.objects.create(name='S1')
+        for i in range(1, 31):
+            Tournament.objects.create(
+                id=i, name=f'Weekly {i:02d}', date=_dt.date(2026, 1, 1) + _dt.timedelta(days=i),
+                entrant_count=i, city='Ann Arbor' if i % 2 else 'Detroit', pr_season=cls.season)
+
+    def test_page_links_keep_search_season_and_sort(self):
+        resp = self.client.get(reverse('tournaments'),
+                               {'q': 'Weekly', 'pr_season': self.season.id, 'sort': 'name'})
+        self.assertContains(resp, f'q=Weekly&amp;pr_season={self.season.id}&amp;sort=name&page=2')
+
+    def test_search_also_matches_city(self):
+        resp = self.client.get(reverse('tournaments'), {'q': 'detroit'})
+        self.assertEqual(resp.context['page_obj'].paginator.count, 15)
+
+    def test_bad_filters_do_not_error(self):
+        resp = self.client.get(reverse('tournaments'), {'pr_season': 'abc', 'sort': 'password'})
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context['page_obj'][0].id, 30)
+
+    def test_sort_and_toggle(self):
+        resp = self.client.get(reverse('tournaments'), {'sort': 'entrants'})
+        self.assertEqual(resp.context['page_obj'][0].id, 1)
+        self.assertEqual(resp.context['sort_links']['entrants']['url'], '?sort=-entrants')
+
+    def test_winner_shown_and_missing_winner_is_not_none(self):
+        self.add_result(30, self.ana.id, 1)
+        resp = self.client.get(reverse('tournaments'))
+        self.assertContains(resp, 'Ana')
+        self.assertNotContains(resp, 'None')
+
+    def test_several_first_places_show_a_count(self):
+        self.add_result(30, self.ana.id, 1)
+        self.add_result(30, self.bo.id, 1)
+        self.assertContains(self.client.get(reverse('tournaments')), '+1')
+
+    def test_query_count_does_not_grow_with_winners(self):
+        for i in range(10, 31):
+            self.add_result(i, self.ana.id, 1)
+        # Count, page, winners, badges, season dropdown, and two from the site-wide context processor.
+        with self.assertNumQueries(7):
+            self.client.get(reverse('tournaments'))
+
+
+class TournamentDetailPageTests(TournamentPagesTestBase):
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.tournament = Tournament.objects.create(
+            id=100, name='Big One', date=_dt.date(2026, 2, 1), entrant_count=99, slug='big-one')
+        Set.objects.create(id=1, player1=cls.ana, player2=cls.bo, player1_score=3, player2_score=1,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Losers Final')
+        Set.objects.create(id=2, player1=cls.bo, player2=cls.ana, player1_score=2, player2_score=3,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Winners Round 1')
+        Set.objects.create(id=3, player1=cls.cy, player2=cls.ana, player1_score=-1, player2_score=0,
+                           winner_id=cls.ana.id, tournament=cls.tournament, location='Grand Final')
+        cls.add_result(100, cls.ana.id, 1)
+        cls.add_result(100, cls.bo.id, 2)
+        cls.url = reverse('tournament_details', args=[100])
+
+    def test_viewing_does_not_change_entrant_count(self):
+        self.client.get(self.url)
+        self.tournament.refresh_from_db()
+        self.assertEqual(self.tournament.entrant_count, 99)
+
+    def test_placed_players_first_then_unplaced(self):
+        standings = list(self.client.get(self.url).context['page_obj'])
+        self.assertEqual([r['player'].name for r in standings], ['Ana', 'Bo', 'Cy'])
+        self.assertIsNone(standings[2]['placement'])
+
+    def test_record_excludes_dqs(self):
+        ana = self.client.get(self.url).context['page_obj'][0]
+        self.assertEqual((ana['wins'], ana['losses']), (2, 0))
+
+    def test_michigan_view_filters_players(self):
+        standings = list(self.client.get(self.url, {'michigan_view': 'on'}).context['page_obj'])
+        self.assertEqual([r['player'].name for r in standings], ['Ana'])
+
+    def test_edit_links_only_for_staff(self):
+        admin_url = reverse('admin:main_tournament_change', args=[100])
+        self.assertNotContains(self.client.get(self.url), admin_url)
+        self.client.force_login(get_user_model().objects.create_superuser('s', 's@x.com', 'pw'))
+        self.assertContains(self.client.get(self.url), admin_url)
+
+    def test_player_sets_from_that_players_side_in_bracket_order(self):
+        resp = self.client.get(reverse('tournament_player_sets', args=[100, self.bo.id]))
+        rows = resp.context['rows']
+        self.assertEqual([r['round'] for r in rows], ['Winners Round 1', 'Losers Final'])
+        self.assertEqual([r['score'] for r in rows], ['2 - 3', '1 - 3'])
+        self.assertEqual([r['result'] for r in rows], ['L', 'L'])
+
+    def test_player_sets_label_dq_instead_of_minus_one(self):
+        resp = self.client.get(reverse('tournament_player_sets', args=[100, self.cy.id]))
+        self.assertEqual(resp.context['rows'][0]['result'], 'DQ')
+        self.assertIsNone(resp.context['rows'][0]['score'])
+        self.assertNotContains(resp, '-1')
+
+    def test_set_edit_links_only_for_staff(self):
+        sets_url = reverse('tournament_player_sets', args=[100, self.bo.id])
+        self.assertNotContains(self.client.get(sets_url), 'Edit')
+        self.client.force_login(get_user_model().objects.create_superuser('s', 's@x.com', 'pw'))
+        self.assertContains(self.client.get(sets_url), 'Edit')
+
+
+class BackfillEventInfoTests(TestCase):
+    def setUp(self):
+        Tournament.objects.create(id=1, name='No slug', date=_dt.date(2026, 1, 1), entrant_count=15)
+        Tournament.objects.create(id=2, name='Has slug', date=_dt.date(2026, 1, 2), entrant_count=9, slug='kept')
+
+    def _run(self, *args):
+        reply = _mock.Mock(status_code=200)
+        reply.json.return_value = {'data': {
+            'e1': {'numEntrants': 7, 'tournament': {'slug': 'tournament/new-slug'}},
+            'e2': {'numEntrants': 8, 'tournament': {'slug': 'tournament/other'}},
+        }}
+        module = 'main.management.commands.backfill_event_info'
+        with _mock.patch(f'{module}.requests.post', return_value=reply), \
+                _mock.patch(f'{module}.time.sleep'), \
+                _mock.patch(f'{module}.environ.Env') as env:
+            env.return_value.return_value = 'token'
+            _call_command('backfill_event_info', *args, stdout=_StringIO())
+
+    def test_fills_only_missing_slugs_and_leaves_counts_by_default(self):
+        self._run()
+        first, second = Tournament.objects.get(id=1), Tournament.objects.get(id=2)
+        self.assertEqual((first.slug, first.entrant_count), ('new-slug', 15))
+        self.assertEqual((second.slug, second.entrant_count), ('kept', 9))
+
+    def test_entrants_flag_corrects_counts_but_never_replaces_a_slug(self):
+        self._run('--entrants')
+        self.assertEqual(Tournament.objects.get(id=1).entrant_count, 7)
+        second = Tournament.objects.get(id=2)
+        self.assertEqual((second.slug, second.entrant_count), ('kept', 8))
+
+    def test_dry_run_saves_nothing(self):
+        self._run('--entrants', '--dry-run')
+        first = Tournament.objects.get(id=1)
+        self.assertEqual((first.slug, first.entrant_count), (None, 15))
+
+    def test_helpers(self):
+        self.assertEqual(clean_slug('tournament/abc'), 'abc')
+        self.assertIn('e5: event(id: 5)', build_query([5]))
+
+
+class PlayerStartggLinkTests(TournamentPagesTestBase):
+    def _api_reply(self, data):
+        reply = _mock.Mock(status_code=200)
+        reply.json.return_value = {'data': data}
+        return reply
+
+    def test_url_only_when_slug_is_known(self):
+        self.assertIsNone(Player(name='x').startgg_url)
+        self.assertEqual(Player(name='x', startgg_slug='ab12').startgg_url, 'https://www.start.gg/user/ab12')
+
+    def test_player_page_links_to_start_gg_only_with_a_slug(self):
+        url = reverse('player_detail', args=[self.bo.id])
+        self.assertNotContains(self.client.get(url), 'View on start.gg')
+        Player.objects.filter(id=self.bo.id).update(startgg_slug='ab12')
+        self.assertContains(self.client.get(url), 'https://www.start.gg/user/ab12')
+
+    def test_fetch_strips_prefix_and_skips_players_without_accounts(self):
+        reply = self._api_reply({'p1': {'user': {'slug': 'user/ab12'}}, 'p2': {'user': None}, 'p3': None})
+        with _mock.patch('main.data_entry.requests.post', return_value=reply):
+            self.assertEqual(fetch_player_slugs('t', [1, 2, 3]), {1: 'ab12'})
+
+    def test_fetch_returns_none_on_failure(self):
+        with _mock.patch('main.data_entry.requests.post', return_value=_mock.Mock(status_code=500)):
+            self.assertIsNone(fetch_player_slugs('t', [1]))
+
+    def _backfill(self, *args):
+        module = 'main.management.commands.backfill_player_slugs'
+        with _mock.patch(f'{module}.fetch_player_slugs', return_value={1: 'new'}) as fetch, \
+                _mock.patch(f'{module}.time.sleep'), \
+                _mock.patch(f'{module}.environ.Env') as env:
+            env.return_value.return_value = 'token'
+            _call_command('backfill_player_slugs', *args, stdout=_StringIO())
+        return fetch
+
+    def test_backfill_never_touches_an_existing_slug(self):
+        Player.objects.filter(id=self.bo.id).update(startgg_slug='kept')
+        fetch = self._backfill()
+        self.assertEqual(fetch.call_args.args[1], [1, 3])
+        self.assertEqual(Player.objects.get(id=1).startgg_slug, 'new')
+        self.assertEqual(Player.objects.get(id=2).startgg_slug, 'kept')
+
+    def test_backfill_dry_run_saves_nothing(self):
+        self._backfill('--dry-run')
+        self.assertIsNone(Player.objects.get(id=1).startgg_slug)

@@ -141,9 +141,14 @@ class Player(models.Model):
     pr_notable = models.BooleanField(blank=True, null=True, default=False)
     pr_eligible = models.BooleanField(blank=True, null=True, default=False)
     main_account = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True)
+    startgg_slug = models.CharField(max_length=64, blank=True, null=True)
 
     def __str__(self):
         return self.name if self.name is not None else "Unknown Player"
+
+    @property
+    def startgg_url(self):
+        return f'https://www.start.gg/user/{self.startgg_slug}' if self.startgg_slug else None
 
     class Meta:
         db_table = 'player'

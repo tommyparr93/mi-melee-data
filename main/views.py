@@ -25,6 +25,7 @@ from django.db.models.functions import Cast, Lower
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
 from functools import wraps
+from urllib.parse import urlencode
 
 # Admin tools are superuser-only. Match base.html's `is_superuser` convention
 # (the only staff are superusers). Hiding a menu link is not access control:
@@ -451,41 +452,116 @@ class PlayerListView(generic.ListView):
         return queryset
 
 
+# URL sort key -> (model field, direction used when the column is first clicked)
+TOURNAMENT_SORTS = {
+    'date': ('date', 'desc'),
+    'name': ('name', 'asc'),
+    'city': ('city', 'asc'),
+    'entrants': ('entrant_count', 'desc'),
+}
+
+
+def _ordinal(number):
+    if 10 <= number % 100 <= 20:
+        suffix = 'th'
+    else:
+        suffix = {1: 'st', 2: 'nd', 3: 'rd'}.get(number % 10, 'th')
+    return f'{number}{suffix}'
+
+
+def _round_sort_key(round_name):
+    """Orders one player's sets along their bracket path: winners side, losers side, grand final."""
+    name = (round_name or '').lower()
+    if 'grand final' in name:
+        return (3, 1 if 'reset' in name else 0, 0)
+    side = 2 if name.startswith(('losers', 'l round')) else 1
+    number = re.search(r'\d+', name)
+    if number:
+        return (side, 0, int(number.group()))
+    for stage, word in enumerate(('quarter', 'semi', 'final'), start=1):
+        if word in name:
+            return (side, stage, 0)
+    return (side, 0, 0)
+
+
 class TournamentListView(generic.ListView):
     model = Tournament
     template_name = 'main/tournaments.html'
     context_object_name = 'tournaments'
     paginate_by = 25
-    ordering = ['-date']
-    queryset = Tournament.objects.all()
+
+    def _current_sort(self):
+        requested = self.request.GET.get('sort', '')
+        key = requested.lstrip('-')
+        if key not in TOURNAMENT_SORTS:
+            return 'date', 'desc'
+        return key, 'desc' if requested.startswith('-') else 'asc'
+
+    def _query_string(self, **overrides):
+        """The active search, season and sort as a URL query, without the page number."""
+        params = {name: self.request.GET.get(name) for name in ('q', 'pr_season', 'sort')}
+        params.update(overrides)
+        return urlencode({name: value for name, value in params.items() if value})
+
+    def get_queryset(self):
+        queryset = Tournament.objects.all()
+
+        query = self.request.GET.get('q', '').strip()
+        if query:
+            queryset = queryset.filter(Q(name__icontains=query) | Q(city__icontains=query))
+
+        pr_season_id = _parse_int_param(self.request, 'pr_season')
+        if pr_season_id is not None:
+            queryset = queryset.filter(pr_season_id=pr_season_id)
+
+        key, direction = self._current_sort()
+        field = F(TOURNAMENT_SORTS[key][0])
+        if key in ('name', 'city'):
+            field = Lower(TOURNAMENT_SORTS[key][0])
+        order = field.desc(nulls_last=True) if direction == 'desc' else field.asc(nulls_last=True)
+        return queryset.order_by(order, '-date', '-id')
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        page = context['page_obj']
 
-        # Getting distinct PRSeasons related to the displayed tournaments
-        all_pr_season_ids = Tournament.objects.values_list('pr_season', flat=True).distinct()
-        all_pr_seasons = PRSeason.objects.filter(
-            id__in=all_pr_season_ids, region_code_id=MICHIGAN_REGION_CODE).order_by('-end_date')
+        # One query for the page's winners. Some events have several first places.
+        tournaments = list(page.object_list)
+        winners = defaultdict(list)
+        rows = TournamentResults.objects.filter(
+            tournament_id__in=[t.id for t in tournaments], placement=1,
+        ).values_list('tournament_id', 'player_id', 'player_id__name')
+        for tournament_id, player_id, name in sorted(rows, key=lambda r: (r[2] or '').lower()):
+            winners[tournament_id].append({'id': player_id, 'name': name})
+        for tournament in tournaments:
+            tournament.winners = winners[tournament.id]
+            tournament.extra_winner_count = max(len(tournament.winners) - 1, 0)
+        page.object_list = tournaments
 
-        # Add pr_seasons to context
-        context['pr_seasons'] = all_pr_seasons
+        current_key, current_direction = self._current_sort()
+        sort_links = {}
+        for key, (_, first_direction) in TOURNAMENT_SORTS.items():
+            is_current = key == current_key
+            if is_current:
+                direction = 'asc' if current_direction == 'desc' else 'desc'
+            else:
+                direction = first_direction
+            sort_links[key] = {
+                'url': '?' + self._query_string(sort=('-' if direction == 'desc' else '') + key),
+                'arrow': ('▼' if current_direction == 'desc' else '▲') if is_current else '',
+            }
 
+        context.update({
+            'pr_seasons': PRSeason.objects.filter(
+                id__in=Tournament.objects.exclude(pr_season=None).values('pr_season'),
+                region_code_id=MICHIGAN_REGION_CODE,
+            ).order_by('-end_date'),
+            'sort_links': sort_links,
+            'page_query': self._query_string(),
+            'page_range': page.paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1),
+            'has_filters': bool(self.request.GET.get('q') or self.request.GET.get('pr_season')),
+        })
         return context
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        query = self.request.GET.get('q')
-        pr_season_id = self.request.GET.get('pr_season')
-
-        if query:
-            queryset = super().get_queryset()
-            queryset = queryset.filter(Q(name__icontains=query))
-
-        if pr_season_id:
-            queryset = queryset.filter(
-                pr_season_id=pr_season_id)  # Assuming pr_season is a foreign key in your Tournament model
-
-        return queryset
 
 
 # need to refactor have logic on this front to pass primary player and "opponent" within the sets context
@@ -612,6 +688,7 @@ class PlayerDetailView(DetailView):
         context['opponents'] = Paginator(h2h_list, 40).get_page(self.request.GET.get('opponents_page'))
         context['tournaments'] = Paginator(tournaments, 40).get_page(self.request.GET.get('tournaments_page'))
         context['calculations'] = player_detail_calculations(player, all_sets)
+        context['pr_standing'] = _player_pr_standing(player)
 
         return context
 
@@ -675,30 +752,103 @@ def _season_graphic(request, season):
 
 
 class TournamentDetailView(DetailView):
-    model = Tournament
+    queryset = Tournament.objects.select_related('pr_season')
     template_name = 'main/tournament_detail.html'
+    standings_per_page = 128
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        tournament = self.get_object()
-        sets = Set.objects.filter(tournament_id=tournament.id)
-        # Getting distinct players from player1 and player2 fields
-        player1_ids = sets.values_list('player1', flat=True).distinct()
-        player2_ids = sets.values_list('player2', flat=True).distinct()
+        standings = _tournament_standings(self.object.id)
+        michigan = [row for row in standings if row['is_michigan']]
+        michigan_view = bool(self.request.GET.get('michigan_view'))
+        shown = michigan if michigan_view else standings
 
-        # Combine player1_ids and player2_ids and remove duplicates
-        all_player_ids = set(list(player1_ids) + list(player2_ids))
-
-        # Count of distinct players
-        distinct_player_count = len(all_player_ids)
-        tournament.entrant_count = distinct_player_count
-        tournament.save()
-        context['count'] = distinct_player_count
-        context['sets'] = sets
-
-        results = TournamentResults.objects.filter(tournament_id=tournament).order_by('placement')
-        context['results'] = results
+        page = Paginator(shown, self.standings_per_page).get_page(self.request.GET.get('page'))
+        context.update({
+            'page_obj': page,
+            'is_paginated': page.has_other_pages(),
+            'page_range': page.paginator.get_elided_page_range(page.number, on_each_side=2, on_ends=1),
+            'page_query': 'michigan_view=on' if michigan_view else '',
+            'michigan_view': michigan_view,
+            'standings_count': len(standings),
+            'michigan_count': len(michigan),
+            'has_placements': any(row['placement'] is not None for row in standings),
+            'unplaced_count': sum(row['placement'] is None for row in standings),
+        })
         return context
+
+
+def _tournament_standings(tournament_id):
+    """Everyone who has a placement or a set at this event, placed players first.
+
+    Uses plain tuples because an event can have thousands of sets on a small server.
+    """
+    records = defaultdict(lambda: {'wins': 0, 'losses': 0, 'has_sets': False})
+    sets = Set.objects.filter(tournament_id=tournament_id).values_list(
+        'player1_id', 'player2_id', 'player1_score', 'player2_score', 'winner_id')
+    for player1, player2, score1, score2, winner in sets:
+        is_dq = score1 == -1 or score2 == -1
+        for player, opponent in ((player1, player2), (player2, player1)):
+            if player is None:
+                continue
+            records[player]['has_sets'] = True
+            if is_dq or winner is None:
+                continue
+            records[player]['wins' if winner == player else 'losses'] += 1
+
+    placements = dict(TournamentResults.objects.filter(
+        tournament_id=tournament_id).values_list('player_id', 'placement'))
+
+    players = Player.objects.filter(id__in=set(records) | set(placements)).select_related('main_char')
+    rows = []
+    for player in players:
+        placement = placements.get(player.id)
+        record = records[player.id]
+        rows.append({
+            'player': player,
+            'placement': placement,
+            'place_label': _ordinal(placement) if placement else None,
+            'wins': record['wins'],
+            'losses': record['losses'],
+            'has_sets': record['has_sets'],
+            'is_michigan': player.region_code_id == MICHIGAN_REGION_CODE,
+        })
+    rows.sort(key=lambda r: (r['placement'] is None, r['placement'] or 0, (r['player'].name or '').lower()))
+    return rows
+
+
+def tournament_player_sets(request, pk, player_id):
+    """HTMX fragment: one player's sets at one tournament."""
+    tournament = get_object_or_404(Tournament, pk=pk)
+    sets = Set.objects.filter(tournament=tournament).filter(
+        Q(player1_id=player_id) | Q(player2_id=player_id)
+    ).select_related('player1', 'player2')
+
+    rows = []
+    for played_set in sets:
+        is_player1 = played_set.player1_id == player_id
+        opponent = played_set.player2 if is_player1 else played_set.player1
+        mine, theirs = played_set.player1_score, played_set.player2_score
+        if not is_player1:
+            mine, theirs = theirs, mine
+
+        is_dq = mine == -1 or theirs == -1
+        if is_dq:
+            result = 'DQ'
+        elif played_set.winner_id is None:
+            result = ''
+        else:
+            result = 'W' if played_set.winner_id == player_id else 'L'
+
+        rows.append({
+            'id': played_set.id,
+            'round': played_set.location or '',
+            'opponent': opponent,
+            'score': None if is_dq or mine is None or theirs is None else f'{mine} - {theirs}',
+            'result': result,
+        })
+    rows.sort(key=lambda row: (_round_sort_key(row['round']), row['id']))
+    return render(request, 'main/partials/tournament_player_sets.html', {'rows': rows})
 
 
 class PrEligiblePlayerListView(PlayerListView):
@@ -955,6 +1105,59 @@ _TAG_ANNOTATION = re.compile(r'\s*\((?:#\d+,\s*SSBM\s*(?:Rank|Summer)\s*\d{4}|SS
 def _clean_player_tag(name):
     cleaned = _TAG_ANNOTATION.sub('', name or '').strip()
     return cleaned or (name or '')
+
+
+def _completed_pr_results():
+    """Placements on finished Michigan seasons and year-end national lists, oldest
+    first. Summer national lists are shorter and stored for reference only."""
+    return (PRSeasonResult.objects
+            .filter(pr_season__is_active=False,
+                    pr_season__region_code_id__in=[MICHIGAN_REGION_CODE, NATIONAL_REGION_CODE])
+            .exclude(pr_season__region_code_id=NATIONAL_REGION_CODE, pr_season__name__icontains='summer')
+            .select_related('pr_season')
+            .order_by(F('pr_season__start_date').asc(nulls_first=True), 'pr_season_id'))
+
+
+def _pr_rank_label(rank):
+    rank = (rank or '').strip()
+    return f'#{rank}' if rank.isdigit() else rank.upper()
+
+
+def _highest_pr_placement(results):
+    """The best numbered placement, most recent if tied; failing that, the latest
+    honorable mention. Inactive listings aren't a peak."""
+    best = None
+    for result in results:                  # oldest first, so ties keep the newest
+        rank = result.rank.strip()
+        if rank.isdigit() and (best is None or not best.rank.strip().isdigit()
+                               or int(rank) <= int(best.rank.strip())):
+            best = result
+        elif rank.upper() == 'HM' and (best is None or not best.rank.strip().isdigit()):
+            best = result
+    return best
+
+
+def _player_pr_standing(player):
+    """The player page's PR summary: placements on the latest completed Michigan
+    and national lists, then the highest placement ever on each."""
+    completed = _completed_pr_results()
+    results = list(completed.filter(player=player))
+    current, highest = [], []
+    for region, name in ((MICHIGAN_REGION_CODE, 'MI PR'), (NATIONAL_REGION_CODE, 'National')):
+        is_michigan = region == MICHIGAN_REGION_CODE
+        placed = [r for r in results if r.pr_season.region_code_id == region]
+        if not placed:
+            continue
+        newest = completed.filter(pr_season__region_code_id=region).last()
+        on_newest = next((r for r in placed if r.pr_season_id == newest.pr_season_id), None)
+        if on_newest:
+            current.append({'heading': f'Current {name}', 'rank': _pr_rank_label(on_newest.rank),
+                            'season': on_newest.pr_season.name, 'is_michigan': is_michigan})
+        best = _highest_pr_placement(placed)
+        if best:
+            highest.append({'heading': f'Highest {name}', 'rank': _pr_rank_label(best.rank),
+                            'season': best.pr_season.name, 'is_michigan': is_michigan})
+    return current + highest
 
 
 def _season_page_context(season, results):
